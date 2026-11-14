@@ -3,6 +3,7 @@ import pandas as pd
 import io
 from modules.loader import get_sheet_names, load_data
 from modules.cleaner import clean_nama, split_jk_umur, kategori_umur, parse_kamar
+from modules.tracker import track_perpindahan
 
 st.set_page_config(
     page_title="SIM-RM Helper",
@@ -142,7 +143,20 @@ with tab1:
 
 with tab2:
     st.subheader("🔁 Track Perpindahan Kamar")
-    st.write("Fitur dalam pengembangan.")
+    df_clean = st.session_state.get("df_clean")
+    if df_clean is None or df_clean.empty:
+        st.info("Silakan upload dan proses data di Tab Upload terlebih dahulu.")
+    else:
+        df_long = track_perpindahan(df_clean)
+        st.dataframe(df_long, use_container_width=True, hide_index=True)
+        excel_buffer = io.BytesIO()
+        df_long.to_excel(excel_buffer, index=False, engine="openpyxl")
+        st.download_button(
+            "Download Hasil Track (Excel)",
+            data=excel_buffer.getvalue(),
+            file_name="track_perpindahan.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
 
 with tab3:
     st.subheader("🏥 BOR & Indikator")
