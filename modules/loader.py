@@ -7,8 +7,8 @@ def get_sheet_names(file_bytes, file_name):
         try:
             xls = pd.ExcelFile(file_bytes)
             return xls.sheet_names
-        except Exception:
-            return []
+        except Exception as e:
+            return [f"ERROR: {str(e)}"]
     return ["Sheet1"]
 
 @st.cache_data(show_spinner=False)

@@ -44,6 +44,8 @@ with tab1:
 
         if not sheet_names:
             st.error("❌ Gagal membaca file. Pastikan format file tidak corrupt.")
+        elif sheet_names[0].startswith("ERROR:"):
+            st.error(f"❌ Detail Error: {sheet_names[0]}")
         else:
             selected_sheet = sheet_names[0]
             if len(sheet_names) > 1:
