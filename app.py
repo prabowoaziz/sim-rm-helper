@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io
+from pathlib import Path
 from modules.loader import get_sheet_names, load_sheet_by_name
 from modules.cleaner import clean_nama, clean_kelas, cek_kelas_titipan, guess_column_types, split_jk_umur, kategori_umur, parse_kamar
 from modules.tracker import track_perpindahan
@@ -213,6 +214,15 @@ with tab1:
                 if st.session_state.get("df_clean") is not None:
                     df_clean = st.session_state.df_clean
                     st.dataframe(df_clean.head(), use_container_width=True)
+                    excel_buffer = io.BytesIO()
+                    df_clean.to_excel(excel_buffer, index=False, engine="openpyxl")
+                    nama_file_asli = Path(uploaded.name).stem
+                    st.download_button(
+                        "Download Excel Bersih",
+                        data=excel_buffer.getvalue(),
+                        file_name=f"Data_Bersih_{nama_file_asli}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
                     if "is_titipan" in df_clean.columns and df_clean["is_titipan"].any():
                         st.warning("Ada pasien titipan: kelas jaminan berbeda dari Kelas Kamar fisik.")
                         kolom_titipan = df_clean.loc[
@@ -222,14 +232,6 @@ with tab1:
                             "ruang": "Kamar Fisik",
                         })
                         st.dataframe(kolom_titipan, use_container_width=True, hide_index=True)
-                    excel_buffer = io.BytesIO()
-                    df_clean.to_excel(excel_buffer, index=False, engine="openpyxl")
-                    st.download_button(
-                        "Download Excel Bersih",
-                        data=excel_buffer.getvalue(),
-                        file_name="data_bersih.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    )
     else:
         st.write("")
         st.info("Belum ada file yang di-upload.")
