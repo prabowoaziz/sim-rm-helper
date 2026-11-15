@@ -315,10 +315,31 @@ with tab4:
             status_counts, mortalitas_df = hitung_statistik_dan_mortalitas(df_long)
             st.dataframe(status_counts, use_container_width=True)
             st.dataframe(mortalitas_df, use_container_width=True)
+            buf_stat_mortalitas = io.BytesIO()
+            with pd.ExcelWriter(buf_stat_mortalitas, engine='openpyxl') as writer:
+                status_counts.to_excel(writer, sheet_name="Statistik", index=False)
+                mortalitas_df.to_excel(writer, sheet_name="Mortalitas", index=False)
+            st.download_button(
+                "⬇️ Download Statistik & Mortalitas (Excel)",
+                data=buf_stat_mortalitas.getvalue(),
+                file_name="Statistik_Mortalitas.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="download_statistik_mortalitas",
+            )
             
         with st.expander(" RL 3.1 — Kegiatan Ranap", expanded=False):
             df_rl31 = hitung_rl_31(df_long)
             st.dataframe(df_rl31, use_container_width=True)
+            buf_rl31 = io.BytesIO()
+            with pd.ExcelWriter(buf_rl31, engine='openpyxl') as writer:
+                df_rl31.to_excel(writer, index=False)
+            st.download_button(
+                "⬇️ Download RL 3.1 (Excel)",
+                data=buf_rl31.getvalue(),
+                file_name="RL_3.1.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="download_rl31",
+            )
             
         with st.expander(" RL 4a — Morbiditas Rawat Inap & ICD-10", expanded=False):
             st.write("**Pemetaan Kode ICD-10 (Manual & Otomatis)**")
@@ -362,3 +383,13 @@ with tab4:
 
             df_rl4a = hitung_rl_4a(df_long)
             st.dataframe(df_rl4a, use_container_width=True)
+            buf_rl4a = io.BytesIO()
+            with pd.ExcelWriter(buf_rl4a, engine='openpyxl') as writer:
+                df_rl4a.to_excel(writer, index=False)
+            st.download_button(
+                "⬇️ Download RL 4a (Excel)",
+                data=buf_rl4a.getvalue(),
+                file_name="RL_4a.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="download_rl4a",
+            )
