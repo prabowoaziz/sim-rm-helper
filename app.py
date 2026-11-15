@@ -4,6 +4,7 @@ import io
 from modules.loader import get_sheet_names, load_data
 from modules.cleaner import clean_nama, split_jk_umur, kategori_umur, parse_kamar
 from modules.tracker import track_perpindahan
+from modules.master_data import init_master_tt, update_master_tt
 
 st.set_page_config(
     page_title="SIM-RM Helper",
@@ -34,7 +35,36 @@ st.markdown("---")
 if "df_mentah" not in st.session_state:
     st.session_state.df_mentah = None
 
-tab1, tab2, tab3, tab4 = st.tabs(["📤 Upload", "🔁 Mutasi", "🏥 BOR", "📊 Laporan"])
+tab_master, tab1, tab2, tab3, tab4 = st.tabs(["⚙️ Master Data", "📤 Upload", "🔁 Mutasi", "🏥 BOR", "📊 Laporan"])
+
+with tab_master:
+    init_master_tt()
+    st.subheader("⚙️ Master Tempat Tidur (TT)")
+    st.info("Silakan atur jumlah tempat tidur per ruangan.")
+
+    master_tt_baru = {}
+    for ruang, jumlah in st.session_state.master_tt.items():
+        master_tt_baru[ruang] = st.number_input(
+            ruang,
+            min_value=0,
+            value=int(jumlah),
+            step=1,
+            key=f"master_tt_{ruang}",
+        )
+
+    ruang_baru = st.text_input("Nama ruang baru", key="master_tt_ruang_baru")
+    if st.button("Tambah Ruangan"):
+        ruang_baru = ruang_baru.strip()
+        if ruang_baru and ruang_baru not in st.session_state.master_tt:
+            update_master_tt(ruang_baru, 0)
+            st.rerun()
+        elif ruang_baru in st.session_state.master_tt:
+            st.warning("Ruangan tersebut sudah ada.")
+
+    if st.button("Simpan Master TT"):
+        for ruang, jumlah in master_tt_baru.items():
+            update_master_tt(ruang, jumlah)
+        st.success("Master TT berhasil diperbarui!")
 
 with tab1:
     st.subheader("📤 Upload Data Mentah")
