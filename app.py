@@ -148,9 +148,10 @@ with tab2:
         st.info("Silakan upload dan proses data di Tab Upload terlebih dahulu.")
     else:
         df_long = track_perpindahan(df_clean)
-        st.dataframe(df_long, use_container_width=True, hide_index=True)
+        df_tampilan = df_long.rename(columns={"pindah": "Pindahan"})
+        st.dataframe(df_tampilan, use_container_width=True, hide_index=True)
         excel_buffer = io.BytesIO()
-        df_long.to_excel(excel_buffer, index=False, engine="openpyxl")
+        df_tampilan.to_excel(excel_buffer, index=False, engine="openpyxl")
         st.download_button(
             "Download Hasil Track (Excel)",
             data=excel_buffer.getvalue(),

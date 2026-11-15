@@ -7,6 +7,8 @@ def track_perpindahan(df):
         return df.copy()
 
     d = df.copy()
+    # Buang Transit IGD dari hitungan
+    d = d[~d['kode_kamar'].astype(str).str.contains('TIG|Transit IGD', case=False, na=False)]
     # Buang baris yang tidak punya no_rm atau kamar
     d = d[d['no_rm'].notna() & d['kode_kamar'].notna()]
 
