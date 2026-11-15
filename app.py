@@ -27,16 +27,23 @@ st.markdown("""
     
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
+    [data-testid="stHeader"] { display: none !important; }
+    .stAppToolbar { display: none !important; }
+    .block-container { padding-top: 0 !important; }
     
     /* PAKSA SIDEBAR MUNCUL */
     [data-testid="stSidebar"] {
         display: block !important;
         background-color: #ffffff !important;
-        border-right: 1px solid #e2e8f0;
+        border-right: 2px solid #e2e8f0 !important;
         box-shadow: 2px 0 10px rgba(0,0,0,0.03);
         min-width: 280px !important;
         padding-top: 20px;
     }
+    /* Sembunyikan tombol panah hide/unhide sidebar */
+    [data-testid="collapsedControl"] { display: none !important; }
+    /* Sembunyikan tombol close di dalam sidebar */
+    [data-testid="stSidebar"] button[kind="header"] { display: none !important; }
     
     /* Styling Radio Button di Sidebar */
     [data-testid="stSidebar"] .stRadio > div { gap: 4px; }
@@ -53,7 +60,7 @@ st.markdown("""
     div[data-testid="stVerticalBlockBorderWrapper"] {
         background-color: #ffffff; border: 1px solid #e2e8f0 !important;
         border-radius: 16px; padding: 24px !important;
-        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); margin-bottom: 24px;
+        box-shadow: 0 6px 18px rgba(15,23,42,0.08); margin-bottom: 24px;
     }
     
     /* Metrics */
