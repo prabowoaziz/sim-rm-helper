@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import io
 import json
+import hashlib
 from pathlib import Path
 from modules.loader import get_sheet_names, load_sheet_by_name
 from modules.cleaner import clean_nama, clean_kelas, guess_column_types, guess_jk_from_nama, split_jk_umur, kategori_umur, parse_kamar
@@ -16,6 +17,7 @@ from modules.master_data import (
 )
 from modules.bor_calculator import hitung_bor, hitung_bor_kelas, hitung_rata_rata_bor_kelas
 from modules.reporter import hitung_statistik_dan_mortalitas, hitung_rl_31, hitung_rl_4a
+from modules.icd_loader import upload_icd_to_supabase
 
 
 def kategori_ruangan(row):
@@ -318,6 +320,24 @@ with tab_master:
                 st.error(f"Gagal menyimpan Master Kelas Kamar ke Supabase: {error}")
         else:
             st.warning("Master Kelas Kamar diperbarui di sesi ini, tetapi belum tersimpan ke Supabase.")
+
+    st.subheader("🧾 Master ICD-10")
+    icd_file = st.file_uploader("Upload file ICD-10 (.xlsx)", type=["xlsx"], key="upload_master_icd")
+    if icd_file is not None:
+        icd_bytes = icd_file.getvalue()
+        icd_hash = hashlib.sha256(icd_bytes).hexdigest()
+        if st.session_state.get("icd_import_hash") == icd_hash:
+            st.caption("File ICD-10 ini sudah diimpor pada sesi ini.")
+        elif supabase_client is None:
+            st.error("Supabase belum dikonfigurasi. Master ICD-10 tidak dapat diimpor.")
+        else:
+            try:
+                with st.spinner("Mengimpor data ICD..."):
+                    jumlah_icd = upload_icd_to_supabase(icd_bytes, supabase_client)
+                st.session_state.icd_import_hash = icd_hash
+                st.success(f"Berhasil mengimpor {jumlah_icd:,} kode ICD-10.")
+            except Exception as error:
+                st.error(f"Gagal mengimpor ICD-10 ke Supabase: {error}")
 
 with tab1:
     st.subheader("📤 Upload Data Mentah")
@@ -694,6 +714,50 @@ with tab4:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             key="download_rl_4a",
         )
+
+        with st.expander("⚙️ Pemetaan Kode ICD-10", expanded=False):
+            teks_diagnosa = st.text_input(
+                "Cari diagnosa untuk saran kode ICD-10",
+                key="icd_diagnosa_search",
+            ).strip()
+            if len(teks_diagnosa) >= 2:
+                if supabase_client is None:
+                    st.info("Supabase belum dikonfigurasi; pencarian ICD-10 tidak tersedia.")
+                else:
+                    try:
+                        hasil_icd = (
+                            supabase_client.table("master_icd")
+                            .select("code, display, version")
+                            .ilike("display", f"%{teks_diagnosa}%")
+                            .limit(20)
+                            .execute()
+                            .data
+                            or []
+                        )
+                        icd_by_code = {
+                            str(item["code"]): item
+                            for item in hasil_icd
+                            if item.get("code") is not None
+                        }
+                        if icd_by_code:
+                            kode_terpilih = st.selectbox(
+                                "Pilih kode ICD-10 yang sesuai",
+                                options=list(icd_by_code),
+                                format_func=lambda code: f"{code} — {icd_by_code[code].get('display', '')}",
+                                key="icd_diagnosa_code",
+                            )
+                            data_icd_terpilih = icd_by_code[kode_terpilih]
+                            st.session_state.icd_kode_terpilih = kode_terpilih
+                            st.caption(
+                                f"Terpilih: {kode_terpilih} — {data_icd_terpilih.get('display', '')} "
+                                f"(Versi {data_icd_terpilih.get('version', '—')})"
+                            )
+                        else:
+                            st.info("Tidak ada kode ICD-10 yang cocok dengan teks tersebut.")
+                    except Exception as error:
+                        st.error(f"Pencarian ICD-10 gagal: {error}")
+            elif teks_diagnosa:
+                st.caption("Masukkan minimal 2 karakter untuk mencari.")
 
     with st.expander(
         "📝 Audit KLPCM (Kelengkapan Rekam Medis)",
