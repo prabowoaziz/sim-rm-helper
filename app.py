@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import io
 
-# Import modul internal (Sesuaikan jika nama fungsinya beda)
+# Sesuaikan import dengan nama file di folder modules lu
 from modules.loader import get_sheet_names, load_sheet_by_name
 from modules.cleaner import clean_nama, split_jk_umur, parse_kamar, clean_kelas
 from modules.tracker import track_perpindahan
@@ -15,38 +15,12 @@ from modules.reporter import hitung_statistik_dan_mortalitas, hitung_rl_31, hitu
 st.set_page_config(
     page_title="SIM-RM Helper",
     page_icon="",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
-# CSS Sederhana (Hanya untuk merapikan Card dan Tombol)
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-    .stApp { background-color: #f4f6f8; }
-    
-    /* Styling Container */
-    div[data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: #ffffff; border: 1px solid #e2e8f0 !important;
-        border-radius: 12px; padding: 20px !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-    }
-    
-    /* Styling Tombol */
-    .stButton > button {
-        background-color: #0ea5e9; color: white; border-radius: 8px;
-        border: none; padding: 10px 20px; font-weight: 600; width: 100%;
-    }
-    .stButton > button:hover { background-color: #0284c7; color: white; }
-    
-    /* Styling Download Button */
-    .stDownloadButton > button {
-        background-color: #10b981; color: white; border-radius: 8px;
-        border: none; font-weight: 600;
-    }
-</style>
-""", unsafe_allow_html=True)
+st.title(" SIM-RM Helper")
+st.caption("Asisten Laporan Rekam Medis — Upload, Olah, Laporkan")
+st.markdown("---")
 
 # ==========================================
 # 2. INITIALIZE SESSION STATE
@@ -56,54 +30,52 @@ if "df_clean" not in st.session_state: st.session_state.df_clean = None
 if "master_tt" not in st.session_state: st.session_state.master_tt = {"HCU": 6, "ICU": 4, "NICU": 3, "PICU": 2, "Ar Rahmah-1": 10, "Marwah-1": 8, "Kenanga": 10}
 
 # ==========================================
-# 3. SIDEBAR NAVIGATION (PAKAI CARA STANDAR)
+# 3. TABS
 # ==========================================
-with st.sidebar:
-    st.markdown("<h2 style='color:#0ea5e9;'> SIM-RM Helper</h2>", unsafe_allow_html=True)
-    st.markdown("---")
-    menu = st.radio(
-        "Navigasi Menu",
-        [" Dashboard", " Upload Data", " Perpindahan Kamar", " BOR & Indikator", " Laporan RL & Akreditasi", "⚙️ Master Data"]
-    )
-    st.markdown("---")
-    st.caption("© 2026 SIM-RM Helper.")
+tab_dash, tab_master, tab1, tab2, tab3, tab4 = st.tabs([
+    " Dashboard", "⚙️ Master Data", " Upload", " Mutasi", " BOR", " Laporan"
+])
 
-# ==========================================
-# 4. KONTEN SETIAP MENU
-# ==========================================
-
-# --- MENU: DASHBOARD ---
-if menu == " Dashboard":
-    st.title(" Dashboard")
-    st.caption("Ringkasan operasional Rekam Medis")
+# --- TAB: DASHBOARD ---
+with tab_dash:
+    st.subheader("Ringkasan Operasional RS")
     
     with st.container(border=True):
-        st.subheader("Unggah Cepat")
-        uploaded_dash = st.file_uploader("Unggah data SIMRS di sini", type=["xlsx", "xls"], key="uploader_dash")
+        st.write("**Unggah Cepat**")
+        uploaded_dash = st.file_uploader("Upload data di sini", type=["xlsx", "xls"], key="uploader_dash")
         if uploaded_dash:
-            st.info("File diterima. Silakan buka menu ' Upload Data' di kiri untuk proses pemetaan.")
+            st.info("File diterima. Silakan ke tab Upload untuk memproses.")
 
     if st.session_state.df_clean is not None:
         df = st.session_state.df_clean
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Total Pasien", len(df))
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Total Pasien", len(df))
         if 'jenis_kelamin' in df.columns:
-            col2.metric("Laki-laki", len(df[df['jenis_kelamin'] == 'L']))
-            col3.metric("Perempuan", len(df[df['jenis_kelamin'] == 'P']))
+            c2.metric("Laki-laki", len(df[df['jenis_kelamin'] == 'L']))
+            c3.metric("Perempuan", len(df[df['jenis_kelamin'] == 'P']))
         if 'umur_tahun' in df.columns:
-            col4.metric("Rata-rata Umur", f"{df['umur_tahun'].mean():.1f} thn")
+            c4.metric("Rata-rata Umur", f"{df['umur_tahun'].mean():.1f} thn")
         
         with st.container(border=True):
-            st.subheader("Distribusi Status Pulang")
             if 'status_pulang' in df.columns:
                 st.bar_chart(df['status_pulang'].value_counts())
     else:
-        st.info("Belum ada data. Silakan unggah melalui menu Upload Data.")
+        st.info("Belum ada data.")
 
-# --- MENU: UPLOAD DATA ---
-elif menu == " Upload Data":
-    st.title(" Upload Data SIMRS")
-    st.caption("Unggah file Excel mentah, lakukan pemetaan, lalu proses data.")
+# --- TAB: MASTER DATA ---
+with tab_master:
+    st.subheader("⚙️ Master Tempat Tidur (TT)")
+    with st.container(border=True):
+        for ruang, tt in list(st.session_state.master_tt.items()):
+            col1, col2 = st.columns([3, 1])
+            col1.write(f"**{ruang}**")
+            st.session_state.master_tt[ruang] = col2.number_input(f"TT {ruang}", min_value=0, value=tt, label_visibility="collapsed", key=f"tt_{ruang}")
+        if st.button(" Simpan Master TT"):
+            st.success("Master TT berhasil disimpan.")
+
+# --- TAB: UPLOAD ---
+with tab1:
+    st.subheader(" Upload Data Mentah")
     
     with st.container(border=True):
         uploaded = st.file_uploader("Pilih file Excel", type=["xlsx", "xls"])
@@ -172,23 +144,23 @@ elif menu == " Upload Data":
             buf = io.BytesIO()
             with pd.ExcelWriter(buf, engine='openpyxl') as writer:
                 st.session_state.df_clean.to_excel(writer, index=False)
-            st.download_button("⬇️ Download Data Bersih (Excel)", data=buf.getvalue(), file_name="Data_Bersih.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button("⬇️ Download Data Bersih", data=buf.getvalue(), file_name="Data_Bersih.xlsx")
 
-# --- MENU: PERPINDAHAN KAMAR ---
-elif menu == " Perpindahan Kamar":
-    st.title(" Track Perpindahan Kamar")
+# --- TAB: MUTASI ---
+with tab2:
+    st.subheader(" Track Perpindahan Kamar")
     if st.session_state.df_clean is None:
-        st.info("Silakan upload dan proses data di menu Upload Data terlebih dahulu.")
+        st.info("Silakan upload dan proses data terlebih dahulu.")
     else:
         with st.container(border=True):
             df_long = track_perpindahan(st.session_state.df_clean)
             st.dataframe(df_long, use_container_width=True)
 
-# --- MENU: BOR & INDIKATOR ---
-elif menu == " BOR & Indikator":
-    st.title(" BOR & Indikator")
+# --- TAB: BOR ---
+with tab3:
+    st.subheader(" BOR & Indikator")
     if st.session_state.df_clean is None:
-        st.info("Silakan upload dan proses data di menu Upload Data terlebih dahulu.")
+        st.info("Silakan upload dan proses data terlebih dahulu.")
     else:
         with st.container(border=True):
             df_long = track_perpindahan(st.session_state.df_clean)
@@ -204,11 +176,11 @@ elif menu == " BOR & Indikator":
                 st.markdown("---")
                 st.dataframe(df_bor, use_container_width=True, hide_index=True)
 
-# --- MENU: LAPORAN ---
-elif menu == " Laporan RL & Akreditasi":
-    st.title(" Laporan RL & Akreditasi")
+# --- TAB: LAPORAN ---
+with tab4:
+    st.subheader(" Laporan RL & Akreditasi")
     if st.session_state.df_clean is None:
-        st.info("Silakan upload dan proses data di menu Upload Data terlebih dahulu.")
+        st.info("Silakan upload dan proses data terlebih dahulu.")
     else:
         df_long = track_perpindahan(st.session_state.df_clean)
         
@@ -224,20 +196,3 @@ elif menu == " Laporan RL & Akreditasi":
         with st.expander(" RL 4a — Morbiditas Rawat Inap", expanded=False):
             df_rl4a = hitung_rl_4a(df_long)
             st.dataframe(df_rl4a, use_container_width=True)
-
-# --- MENU: MASTER DATA ---
-elif menu == "⚙️ Master Data":
-    st.title("⚙️ Master Data")
-    
-    with st.container(border=True):
-        st.subheader("️ Master Tempat Tidur (TT)")
-        for ruang, tt in list(st.session_state.master_tt.items()):
-            col1, col2 = st.columns([3, 1])
-            col1.write(f"**{ruang}**")
-            st.session_state.master_tt[ruang] = col2.number_input(f"TT {ruang}", min_value=0, value=tt, label_visibility="collapsed")
-        if st.button(" Simpan Master TT"):
-            st.success("Master TT berhasil disimpan.")
-
-    with st.container(border=True):
-        st.subheader(" Master ICD-10")
-        st.info("Fitur import kamus ICD-10 tersedia di sini.")
