@@ -118,7 +118,11 @@ with tab1:
                 res = supabase.table('riwayat_upload').select('*').order('created_at', desc=True).limit(1).execute()
                 if res.data:
                     latest = res.data[0]
-                    st.session_state.df_clean = pd.read_json(io.StringIO(latest['data_json']))
+                    data_json = latest['data_json']
+                    if isinstance(data_json, str):
+                        import json
+                        data_json = json.loads(data_json)
+                    st.session_state.df_clean = pd.DataFrame(data_json)
                     st.success(f"✅ Berhasil memuat data dari file: {latest['nama_file']}")
                 else:
                     st.warning("Belum ada riwayat data di database.")
