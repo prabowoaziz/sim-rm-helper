@@ -42,6 +42,19 @@ MAPPING_14COL = {
     13: "_drop_4",
 }
 
+
+def _default_excel_column_names(column_count):
+    """Return Excel-style labels (Kolom A, Kolom B, ..., Kolom AA)."""
+    names = []
+    for index in range(column_count):
+        number = index + 1
+        label = ""
+        while number:
+            number, remainder = divmod(number - 1, 26)
+            label = chr(65 + remainder) + label
+        names.append(f"Kolom {label}")
+    return names
+
 SHEET_GROUP_15COL_NO_HEADER = {
     "px masuk": "15col_no_header",
     "doble": "15col_no_header",
@@ -101,24 +114,19 @@ def load_sheet_by_name(file, sheet_name):
                 df = pd.read_excel(source, sheet_name=sheet_name, header=None)
                 mapping = MAPPING_15COL
             elif group == "14col_partial_header":
-                df = pd.read_excel(source, sheet_name=sheet_name, header=None, skiprows=1)
+                df = pd.read_excel(source, sheet_name=sheet_name, header=None)
                 mapping = MAPPING_14COL
             elif group == "15col_partial_header":
-                df = pd.read_excel(source, sheet_name=sheet_name, header=None, skiprows=1)
+                df = pd.read_excel(source, sheet_name=sheet_name, header=None)
                 mapping = MAPPING_15COL
             else:
-                df = pd.read_excel(source, sheet_name=sheet_name, header=0)
+                df = pd.read_excel(source, sheet_name=sheet_name, header=None)
                 mapping = None
 
         if mapping is not None:
             df = df.rename(columns=mapping)
-
-        drop_cols = [
-            column for column in df.columns
-            if str(column).startswith("_drop_") or str(column).casefold().startswith("unnamed")
-        ]
-        if drop_cols:
-            df = df.drop(columns=drop_cols)
+        elif not str(file_name).casefold().endswith(".csv"):
+            df.columns = _default_excel_column_names(len(df.columns))
 
         if {"nama_lengkap", "no_rm"}.issubset(df.columns):
             df[["nama_lengkap", "no_rm"]] = df[["nama_lengkap", "no_rm"]].replace(
@@ -150,7 +158,8 @@ def load_data(file_bytes, file_name, sheet_name=None):
         if file_name.endswith('.csv'):
             df = pd.read_csv(file_obj)
         else:
-            df = pd.read_excel(file_obj, sheet_name=sheet_name, header=0)
+            df = pd.read_excel(file_obj, sheet_name=sheet_name, header=None)
+            df.columns = _default_excel_column_names(len(df.columns))
         return df, None
     except Exception as e:
         return None, str(e)
