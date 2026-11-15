@@ -147,10 +147,10 @@ with tab1:
                 col3.metric("Status", "Siap Diproses")
 
                 st.write("")
-                pv1, pv2 = st.tabs(["📋 Preview Data (5 Baris)", "🔍 Daftar Kolom"])
+                pv1, pv2 = st.tabs(["📋 Preview Data (20 Baris)", "🔍 Daftar Kolom"])
 
                 with pv1:
-                    st.dataframe(df.head(), use_container_width=True)
+                    st.dataframe(df.head(20), use_container_width=True)
 
                 with pv2:
                     kolom_df = {"No": range(1, len(df.columns)+1), "Nama Kolom": list(df.columns)}
@@ -288,7 +288,7 @@ with tab1:
 
                 if st.session_state.get("df_clean") is not None:
                     df_clean = st.session_state.df_clean
-                    st.dataframe(df_clean.head(), use_container_width=True)
+                    st.dataframe(df_clean.head(20), use_container_width=True)
                     excel_buffer = io.BytesIO()
                     df_clean.to_excel(excel_buffer, index=False, engine="openpyxl")
                     nama_file_asli = Path(uploaded.name).stem
