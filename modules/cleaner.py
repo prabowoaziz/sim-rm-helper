@@ -18,6 +18,12 @@ def clean_kelas(val):
     return "Tidak Diketahui"
 
 
+def cek_kelas_titipan(row, master_kelas):
+    kelas_jaminan = str(row['kelas_jam']).strip().upper()
+    kelas_kamar = master_kelas.get(row['ruang'])
+    return kelas_jaminan != str(kelas_kamar).strip().upper() if kelas_kamar is not None else True
+
+
 def split_jk_umur(val):
     if pd.isna(val): return None, None
     s = str(val).strip()

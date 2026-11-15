@@ -19,3 +19,20 @@ def update_master_tt(ruang, jumlah):
     if "master_tt" not in st.session_state:
         init_master_tt()
     st.session_state.master_tt[ruang] = int(jumlah)
+
+
+def init_master_kelas():
+    if "master_kelas" not in st.session_state:
+        st.session_state.master_kelas = {
+            "Ar Rahmah-1": "1",
+            "Marwah-1": "2",
+            "Kenanga": "3",
+        }
+    for ruang in st.session_state.get("master_tt", {}):
+        st.session_state.master_kelas.setdefault(ruang, "1")
+
+
+def update_master_kelas(ruang, kelas):
+    if "master_kelas" not in st.session_state:
+        init_master_kelas()
+    st.session_state.master_kelas[ruang] = str(kelas)

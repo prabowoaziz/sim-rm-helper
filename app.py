@@ -2,9 +2,9 @@ import streamlit as st
 import pandas as pd
 import io
 from modules.loader import get_sheet_names, load_data
-from modules.cleaner import clean_nama, clean_kelas, split_jk_umur, kategori_umur, parse_kamar
+from modules.cleaner import clean_nama, clean_kelas, cek_kelas_titipan, split_jk_umur, kategori_umur, parse_kamar
 from modules.tracker import track_perpindahan
-from modules.master_data import init_master_tt, update_master_tt
+from modules.master_data import init_master_tt, update_master_tt, init_master_kelas, update_master_kelas
 from modules.bor_calculator import hitung_bor, hitung_bor_kelas, hitung_rata_rata_bor_kelas
 
 st.set_page_config(
@@ -40,6 +40,7 @@ tab_master, tab1, tab2, tab3, tab4 = st.tabs(["⚙️ Master Data", "📤 Upload
 
 with tab_master:
     init_master_tt()
+    init_master_kelas()
     st.subheader("⚙️ Master Tempat Tidur (TT)")
     st.info("Silakan atur jumlah tempat tidur per ruangan.")
 
@@ -66,6 +67,26 @@ with tab_master:
         for ruang, jumlah in master_tt_baru.items():
             update_master_tt(ruang, jumlah)
         st.success("Master TT berhasil diperbarui!")
+
+    st.markdown("### 🛏️ Master Kelas Kamar")
+    kelas_opsi = ["VIP", "1", "2", "3"]
+    kelas_kamar_baru = {}
+    kolom_kelas_kamar = st.columns(4)
+    for idx, ruang in enumerate(st.session_state.master_tt):
+        kelas_saat_ini = st.session_state.master_kelas.get(ruang, "1")
+        index_kelas = kelas_opsi.index(kelas_saat_ini) if kelas_saat_ini in kelas_opsi else 1
+        with kolom_kelas_kamar[idx % 4]:
+            kelas_kamar_baru[ruang] = st.selectbox(
+                ruang,
+                kelas_opsi,
+                index=index_kelas,
+                key=f"master_kelas_{ruang}",
+            )
+
+    if st.button("Simpan Master Kelas Kamar"):
+        for ruang, kelas in kelas_kamar_baru.items():
+            update_master_kelas(ruang, kelas)
+        st.success("Master Kelas Kamar berhasil diperbarui!")
 
 with tab1:
     st.subheader("📤 Upload Data Mentah")
@@ -166,11 +187,24 @@ with tab1:
                         "tgl_masuk": pd.to_datetime(nilai_kolom(kolom_tgl_masuk), errors="coerce"),
                         "tgl_keluar": pd.to_datetime(nilai_kolom(kolom_tgl_keluar), errors="coerce"),
                     })
+                    master_kelas = st.session_state.get("master_kelas", {})
+                    df_clean["is_titipan"] = df_clean.apply(
+                        lambda row: cek_kelas_titipan(row, master_kelas), axis=1
+                    )
                     st.session_state.df_clean = df_clean
 
                 if st.session_state.get("df_clean") is not None:
                     df_clean = st.session_state.df_clean
                     st.dataframe(df_clean.head(), use_container_width=True)
+                    if "is_titipan" in df_clean.columns and df_clean["is_titipan"].any():
+                        st.warning("Ada pasien titipan: kelas jaminan berbeda dari Kelas Kamar fisik.")
+                        kolom_titipan = df_clean.loc[
+                            df_clean["is_titipan"], ["no_rm", "nama", "kelas_jam", "ruang"]
+                        ].rename(columns={
+                            "kelas_jam": "Kelas Jaminan (Excel)",
+                            "ruang": "Kamar Fisik",
+                        })
+                        st.dataframe(kolom_titipan, use_container_width=True, hide_index=True)
                     excel_buffer = io.BytesIO()
                     df_clean.to_excel(excel_buffer, index=False, engine="openpyxl")
                     st.download_button(
