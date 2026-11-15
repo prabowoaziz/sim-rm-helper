@@ -16,6 +16,30 @@ from modules.reporter import hitung_statistik_dan_mortalitas, hitung_rl_31, hitu
 # ==========================================
 st.set_page_config(page_title="SIM-RM Helper", page_icon="", layout="wide")
 
+st.markdown("""
+<style>
+/* Memperbesar dan mempertebal teks Tab Navigasi */
+.stTabs [data-baseweb="tab"] {
+    font-size: 20px !important;
+    font-weight: 800 !important;
+    color: #1e293b !important;
+    padding: 12px 24px !important;
+    letter-spacing: 0.5px;
+}
+
+/* Warna saat tab aktif (dipilih) */
+.stTabs [aria-selected="true"] {
+    color: #0ea5e9 !important;
+    border-bottom: 4px solid #0ea5e9 !important;
+}
+
+/* Memperbesar teks di dalam tabel agar mudah dibaca */
+[data-testid="stDataFrame"] {
+    font-size: 16px !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # Inisialisasi Supabase (Pastikan di Streamlit Secrets sudah ada url & key)
 try:
     supabase: Client = create_client(st.secrets["supabase"]["url"], st.secrets["supabase"]["key"])
