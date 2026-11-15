@@ -7,6 +7,7 @@ def guess_column_types(df):
     """Guess common raw-report columns from their contents."""
     guesses = {
         "nama": None,
+        "jk_umur": None,
         "no_rm": None,
         "kamar": None,
         "tgl_masuk": None,
@@ -76,6 +77,24 @@ def guess_column_types(df):
              for column in candidate_columns],
             (("nama", "pasien", "lengkap"),),
         )
+
+    pola_umur = re.compile(r"\d+\s*(?:Th|Bl|Hr)\b", re.I)
+    pola_jk_umur = re.compile(
+        r"^\s*(?:AN|TN|NY|NN|BY)\b.*\d+\s*(?:Th|Bl|Hr)\b",
+        re.I,
+    )
+    jk_umur_scores = []
+    for column in df.columns:
+        nilai_khusus = ratio(column, lambda value: bool(pola_jk_umur.search(str(value))))
+        nilai_umur = ratio(column, lambda value: bool(pola_umur.search(str(value))))
+        # A matching gender/age token marks this as a dedicated demographic column.
+        score = 2 + nilai_khusus if nilai_khusus > 0 else nilai_umur
+        jk_umur_scores.append((column, score))
+    guesses["jk_umur"] = choose(
+        jk_umur_scores,
+        (("jk", "umur", "usia", "kelamin"),),
+    )
+
     room_words = re.compile(
         r"\b(?:HCU|ICU|NICU|PICU|KEN\w*|ASTER|CEMPAKA|MELATI|MAWAR|ANGGREK|ISOLASI|PERINA)\b",
         re.I,

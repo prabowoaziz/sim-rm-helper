@@ -152,7 +152,7 @@ with tab1:
                             return i
                     return 0
 
-                tebakan_jk_umur = next(
+                tebakan_jk_umur = tebakan_kolom["jk_umur"] or next(
                     (
                         column for column in kolom_options
                         if not str(column).casefold().startswith(("_drop_", "unnamed"))
