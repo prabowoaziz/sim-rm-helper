@@ -130,3 +130,53 @@ def hitung_rata_rata_bor_kelas(df_bor_kelas):
         column: float(df_bor_kelas[column].mean()) if column in df_bor_kelas else 0.0
         for column in bor_columns
     }
+
+
+def hitung_bor_harian(df_long, kapasitas_tt=35):
+    """Hitung jumlah pasien terisi dan BOR untuk setiap tanggal."""
+    columns = ['tanggal', 'pasien_terisi', 'bor_persen']
+    if df_long.empty or kapasitas_tt <= 0:
+        return pd.DataFrame(columns=columns)
+
+    required = {'tgl_masuk', 'tgl_keluar'}
+    if not required.issubset(df_long.columns):
+        return pd.DataFrame(columns=columns)
+
+    d = df_long.copy()
+    d['tgl_masuk'] = pd.to_datetime(d['tgl_masuk'], errors='coerce').dt.normalize()
+    d['tgl_keluar'] = pd.to_datetime(d['tgl_keluar'], errors='coerce').dt.normalize()
+    d = d[d['tgl_masuk'].notna()]
+    if d.empty:
+        return pd.DataFrame(columns=columns)
+
+    tanggal_awal = d['tgl_masuk'].min()
+    tanggal_akhir = d['tgl_keluar'].max()
+    if pd.isna(tanggal_akhir):
+        tanggal_akhir = d['tgl_masuk'].max()
+    else:
+        tanggal_akhir = max(tanggal_akhir, d['tgl_masuk'].max())
+
+    rows = []
+    for tanggal in pd.date_range(tanggal_awal, tanggal_akhir, freq='D'):
+        aktif = d[
+            (d['tgl_masuk'] <= tanggal)
+            & (d['tgl_keluar'].isna() | (d['tgl_keluar'] > tanggal))
+        ]
+        pasien_terisi = (
+            int(aktif['no_rm'].nunique())
+            if 'no_rm' in aktif.columns
+            else len(aktif)
+        )
+        rows.append({
+            'tanggal': tanggal,
+            'pasien_terisi': pasien_terisi,
+            'bor_persen': round(pasien_terisi / kapasitas_tt * 100, 2),
+        })
+    return pd.DataFrame(rows, columns=columns)
+
+
+def hitung_rata_rata_bor(df_bor_harian):
+    """Kembalikan rata-rata BOR harian dalam persen."""
+    if df_bor_harian.empty or 'bor_persen' not in df_bor_harian.columns:
+        return 0.0
+    return round(float(df_bor_harian['bor_persen'].mean()), 2)

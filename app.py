@@ -8,7 +8,7 @@ from supabase import create_client, Client
 from modules.loader import get_sheet_names, load_sheet_by_name
 from modules.cleaner import clean_nama, split_jk_umur, parse_kamar, clean_kelas
 from modules.tracker import track_perpindahan
-from modules.bor_calculator import hitung_bor
+from modules.bor_calculator import hitung_bor, hitung_bor_harian, hitung_rata_rata_bor
 from modules.reporter import hitung_statistik_dan_mortalitas, hitung_rl_31, hitung_rl_4a
 
 # ==========================================
@@ -36,8 +36,8 @@ if "master_tt" not in st.session_state: st.session_state.master_tt = {"HCU": 6, 
 # ==========================================
 # 3. TABS
 # ==========================================
-tab_dash, tab_master, tab1, tab2, tab3, tab4 = st.tabs([
-    " Dashboard", "⚙️ Master Data", " Upload", " Mutasi", " BOR", " Laporan"
+tab_dash, tab1, tab2, tab3, tab4, tab_master = st.tabs([
+    " Dashboard", " Upload", " Mutasi", " BOR", " Laporan", "⚙️ Master Data"
 ])
 
 # --- TAB: DASHBOARD ---
@@ -89,32 +89,32 @@ with tab_dash:
 
 # --- TAB: MASTER DATA ---
 with tab_master:
-    st.subheader("⚙️ Master Tempat Tidur (TT)")
-    with st.container(border=True):
-        for ruang, tt in list(st.session_state.master_tt.items()):
-            col1, col2 = st.columns([3, 1])
-            col1.write(f"**{ruang}**")
-            st.session_state.master_tt[ruang] = col2.number_input(f"TT {ruang}", min_value=0, value=tt, label_visibility="collapsed", key=f"tt_{ruang}")
-        if st.button(" Simpan Master TT"):
-            st.success("Master TT disimpan.")
+    with st.expander("🛏️ Master Tempat Tidur (TT)", expanded=False):
+        with st.container(border=True):
+            for ruang, tt in list(st.session_state.master_tt.items()):
+                col1, col2 = st.columns([3, 1])
+                col1.write(f"**{ruang}**")
+                st.session_state.master_tt[ruang] = col2.number_input(f"TT {ruang}", min_value=0, value=tt, label_visibility="collapsed", key=f"tt_{ruang}")
+            if st.button(" Simpan Master TT"):
+                st.success("Master TT disimpan.")
 
-    st.subheader(" Master ICD-10")
-    with st.container(border=True):
-        uploaded_icd = st.file_uploader("Pilih file ICD-10", type=["xlsx"], key="uploader_icd")
-        
-        if uploaded_icd:
-            if st.button(" Import ICD-10 ke Supabase"):
-                with st.spinner("Mengimpor data ICD-10..."):
-                    try:
-                        df_icd = pd.read_excel(uploaded_icd)
-                        df_icd = df_icd[['CODE', 'DISPLAY', 'VERSION']].dropna()
-                        data_icd = df_icd.to_dict('records')
-                        for i in range(0, len(data_icd), 500):
-                            supabase.table('master_icd').upsert(data_icd[i:i+500], on_conflict='code').execute()
-                            
-                        st.success(f"✅ Berhasil mengimpor {len(data_icd)} kode ICD-10!")
-                    except Exception as e:
-                        st.error(f"Gagal import: {e}")
+    with st.expander(" Master ICD-10", expanded=False):
+        with st.container(border=True):
+            uploaded_icd = st.file_uploader("Pilih file ICD-10", type=["xlsx"], key="uploader_icd")
+            
+            if uploaded_icd:
+                if st.button(" Import ICD-10 ke Supabase"):
+                    with st.spinner("Mengimpor data ICD-10..."):
+                        try:
+                            df_icd = pd.read_excel(uploaded_icd)
+                            df_icd = df_icd[['CODE', 'DISPLAY', 'VERSION']].dropna()
+                            data_icd = df_icd.to_dict('records')
+                            for i in range(0, len(data_icd), 500):
+                                supabase.table('master_icd').upsert(data_icd[i:i+500], on_conflict='code').execute()
+                                
+                            st.success(f"✅ Berhasil mengimpor {len(data_icd)} kode ICD-10!")
+                        except Exception as e:
+                            st.error(f"Gagal import: {e}")
 
 # --- TAB: UPLOAD ---
 with tab1:
@@ -261,6 +261,14 @@ with tab3:
                 c4.metric("BTO", f"{total['BTO (kali)']} kali")
                 st.markdown("---")
                 st.dataframe(df_bor, use_container_width=True, hide_index=True)
+
+            st.subheader(" BOR RPA/RPM (Kapasitas 35 TT)")
+            df_harian = hitung_bor_harian(df_long, kapasitas_tt=35)
+            rata_rata = hitung_rata_rata_bor(df_harian)
+            st.metric("Rata-rata BOR Harian", f"{rata_rata}%")
+            st.dataframe(df_harian, use_container_width=True)
+            if not df_harian.empty:
+                st.line_chart(df_harian.set_index('tanggal')['bor_persen'])
 
 # --- TAB: LAPORAN ---
 with tab4:
