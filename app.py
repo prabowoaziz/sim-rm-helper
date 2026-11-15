@@ -32,6 +32,7 @@ st.markdown("---")
 if "df_mentah" not in st.session_state: st.session_state.df_mentah = None
 if "df_clean" not in st.session_state: st.session_state.df_clean = None
 if "master_tt" not in st.session_state: st.session_state.master_tt = {"HCU": 6, "ICU": 4, "NICU": 3, "PICU": 2, "Ar Rahmah-1": 10, "Marwah-1": 8, "Kenanga": 10}
+if "master_kelas" not in st.session_state: st.session_state.master_kelas = {}
 
 # ==========================================
 # 3. TABS
@@ -97,6 +98,24 @@ with tab_master:
                 st.session_state.master_tt[ruang] = col2.number_input(f"TT {ruang}", min_value=0, value=tt, label_visibility="collapsed", key=f"tt_{ruang}")
             if st.button(" Simpan Master TT"):
                 st.success("Master TT disimpan.")
+
+    with st.expander("️ Master Kelas Kamar", expanded=False):
+        opsi_kelas = ["VIP", "1", "2", "3", "Khusus (HCU/ICU/NICU/PICU)"]
+        for nama_ruangan in st.session_state.master_tt:
+            kolom_nama_ruangan, kolom_pilih_kelas = st.columns([2, 3])
+            kolom_nama_ruangan.write(nama_ruangan)
+            kelas_saat_ini = st.session_state.master_kelas.get(nama_ruangan, "1")
+            index_kelas = opsi_kelas.index(kelas_saat_ini) if kelas_saat_ini in opsi_kelas else 1
+            pilihan_kelas = kolom_pilih_kelas.selectbox(
+                f"Kelas untuk {nama_ruangan}",
+                opsi_kelas,
+                index=index_kelas,
+                key=f"pilih_master_kelas_{nama_ruangan}",
+                label_visibility="collapsed",
+            )
+            st.session_state.master_kelas[nama_ruangan] = pilihan_kelas
+        if st.button(" Simpan Master Kelas"):
+            st.success("Master Kelas Kamar berhasil disimpan.")
 
     with st.expander(" Master ICD-10", expanded=False):
         with st.container(border=True):
@@ -197,6 +216,19 @@ with tab1:
                             nama_bersih = clean_nama(raw_nama)
                             jk, umur = split_jk_umur(f"{raw_nama} {raw_jk}")
                             kode_kamar, ruang, kelas_kamar = parse_kamar(row[map_kamar] if map_kamar != "— Pilih kolom —" else "")
+                            raw_kelas = row[map_kelas] if map_kelas != "— Pilih kolom —" else None
+                            kelas_dari_master = st.session_state.master_kelas.get(ruang, "Tidak Diketahui")
+                            kelas_excel_kosong = (
+                                raw_kelas is None
+                                or pd.isna(raw_kelas)
+                                or not str(raw_kelas).strip()
+                            )
+                            kelas_jaminan = (
+                                kelas_dari_master
+                                if kelas_excel_kosong
+                                else clean_kelas(raw_kelas)
+                            )
+                            kelas = kelas_dari_master if kelas_excel_kosong else raw_kelas
                             
                             data_bersih.append({
                                 "no_rm": str(row[map_rm]).replace('.0','') if map_rm != "— Pilih kolom —" else None,
@@ -205,10 +237,11 @@ with tab1:
                                 "umur_tahun": umur,
                                 "kode_kamar": kode_kamar,
                                 "ruang": ruang,
+                                "kelas": kelas,
                                 "tgl_masuk": pd.to_datetime(row[map_masuk], errors='coerce') if map_masuk != "— Pilih kolom —" else pd.NaT,
                                 "tgl_keluar": pd.to_datetime(row[map_keluar], errors='coerce') if map_keluar != "— Pilih kolom —" else pd.NaT,
                                 "status_pulang": row[map_status] if map_status != "— Pilih kolom —" else None,
-                                "kelas_jaminan": clean_kelas(row[map_kelas]) if map_kelas != "— Pilih kolom —" else "Tidak Diketahui"
+                                "kelas_jaminan": kelas_jaminan
                             })
                         
                         df_clean = pd.DataFrame(data_bersih).dropna(subset=['nama', 'no_rm'])
