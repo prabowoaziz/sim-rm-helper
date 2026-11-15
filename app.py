@@ -151,15 +151,14 @@ if "master_ruangan_loaded" not in st.session_state:
             st.session_state.master_ruangan_load_error = str(error)
     st.session_state.master_ruangan_loaded = True
 
-with st.sidebar:
-    st.markdown(
-        "<h2 style='color:#0ea5e9; font-weight:700;'>🏥 SIM-RM Helper</h2>",
-        unsafe_allow_html=True,
-    )
-    menu = st.radio(
-        "Navigasi",
-        ["🏠 Dashboard", "📤 Upload Data", "🔁 Perpindahan Kamar", "🏥 BOR & Indikator", "📊 Laporan RL & Akreditasi", "⚙️ Master Data"],
-    )
+st.sidebar.markdown(
+    "<h2 style='color:#0ea5e9; font-weight:700;'>🏥 SIM-RM Helper</h2>",
+    unsafe_allow_html=True,
+)
+menu = st.sidebar.radio(
+    "Navigasi",
+    ["🏠 Dashboard", "📤 Upload Data", "🔁 Perpindahan Kamar", "🏥 BOR & Indikator", "📊 Laporan RL & Akreditasi", "⚙️ Master Data"],
+)
 
 judul_halaman = {
     "🏠 Dashboard": "Dashboard",
@@ -233,38 +232,38 @@ if menu == "🏠 Dashboard":
             metrik[2].metric("Perempuan", f"{total_perempuan:,}")
             metrik[3].metric("Rata-rata Umur", umur_label)
 
-        st.subheader("Distribusi Status Pulang")
-        if "status_pulang" in df_dashboard.columns:
-            status_counts_dashboard = df_dashboard["status_pulang"].value_counts()
-        else:
-            status_counts_dashboard = pd.Series(dtype="int64")
-        if status_counts_dashboard.empty:
-            st.info("Belum ada data status pulang.")
-        else:
-            st.bar_chart(status_counts_dashboard)
+            st.subheader("Distribusi Status Pulang")
+            if "status_pulang" in df_dashboard.columns:
+                status_counts_dashboard = df_dashboard["status_pulang"].value_counts()
+            else:
+                status_counts_dashboard = pd.Series(dtype="int64")
+            if status_counts_dashboard.empty:
+                st.info("Belum ada data status pulang.")
+            else:
+                st.bar_chart(status_counts_dashboard)
 
-        st.subheader("Top 5 Ruangan Terbanyak")
-        if "ruang" in df_dashboard.columns:
-            ruang_counts_dashboard = df_dashboard["ruang"].value_counts().head(5)
-        else:
-            ruang_counts_dashboard = pd.Series(dtype="int64")
-        if ruang_counts_dashboard.empty:
-            st.info("Belum ada data ruangan.")
-        else:
-            st.bar_chart(ruang_counts_dashboard)
+            st.subheader("Top 5 Ruangan Terbanyak")
+            if "ruang" in df_dashboard.columns:
+                ruang_counts_dashboard = df_dashboard["ruang"].value_counts().head(5)
+            else:
+                ruang_counts_dashboard = pd.Series(dtype="int64")
+            if ruang_counts_dashboard.empty:
+                st.info("Belum ada data ruangan.")
+            else:
+                st.bar_chart(ruang_counts_dashboard)
 
-        st.subheader("Distribusi Kelompok Umur")
-        kelompok_umur = pd.cut(
-            umur,
-            bins=[0, 6, 18, 60, float("inf")],
-            labels=["0-5", "6-17", "18-59", "60+"],
-            right=False,
-        )
-        distribusi_umur = kelompok_umur.value_counts(sort=False).reindex(
-            ["0-5", "6-17", "18-59", "60+"],
-            fill_value=0,
-        )
-        st.bar_chart(distribusi_umur)
+            st.subheader("Distribusi Kelompok Umur")
+            kelompok_umur = pd.cut(
+                umur,
+                bins=[0, 6, 18, 60, float("inf")],
+                labels=["0-5", "6-17", "18-59", "60+"],
+                right=False,
+            )
+            distribusi_umur = kelompok_umur.value_counts(sort=False).reindex(
+                ["0-5", "6-17", "18-59", "60+"],
+                fill_value=0,
+            )
+            st.bar_chart(distribusi_umur)
 
 if menu == "⚙️ Master Data":
     with st.container(border=True):
@@ -434,13 +433,10 @@ if menu == "📤 Upload Data":
                     col3.metric("Status", "Siap Diproses")
 
                     st.write("")
-                    pv1, pv2 = st.tabs(["📋 Pratinjau Data (20 Baris)", "🔍 Daftar Kolom"])
+                    with st.expander("👁️ Lihat Pratinjau Data Mentah (20 Baris)", expanded=False):
+                        st.dataframe(df.head(20), use_container_width=True)
 
-                    with pv1:
-                        with st.expander("👁️ Lihat Pratinjau Data Mentah (20 Baris)", expanded=False):
-                            st.dataframe(df.head(20), use_container_width=True)
-
-                    with pv2:
+                    with st.expander("🔍 Lihat Daftar Kolom", expanded=False):
                         kolom_df = {"No": range(1, len(df.columns)+1), "Nama Kolom": list(df.columns)}
                         st.dataframe(kolom_df, use_container_width=True, hide_index=True)
 
