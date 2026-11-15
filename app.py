@@ -559,3 +559,21 @@ with tab4:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             key="download_rl_4a",
         )
+
+    st.subheader("📝 Audit KLPCM (Kelengkapan Rekam Medis)")
+    with st.form("form_klpcm"):
+        jumlah_diaudit = st.number_input("Jumlah RM yang diaudit", min_value=1, value=20)
+        jumlah_lengkap = st.number_input(
+            "RM Lengkap (Identitas, Diagnosa, TTD Dokter, dll)",
+            min_value=0,
+            value=15,
+        )
+        hitung_klpcm = st.form_submit_button("Hitung KLPCM")
+
+    if hitung_klpcm:
+        persentase = (jumlah_lengkap / jumlah_diaudit) * 100
+        st.metric("Persentase KLPCM", f"{persentase:.2f}%")
+        if persentase >= 80:
+            st.success("✅ Memenuhi standar akreditasi (≥ 80%)")
+        else:
+            st.error("❌ Belum memenuhi standar akreditasi (< 80%)")
