@@ -4,7 +4,6 @@ import io
 import json
 from supabase import create_client, Client
 
-# Sesuaikan import dengan nama file di folder modules lu
 from modules.loader import get_sheet_names, load_sheet_by_name
 from modules.cleaner import clean_nama, split_jk_umur, parse_kamar, clean_kelas
 from modules.tracker import track_perpindahan
@@ -14,11 +13,7 @@ from modules.reporter import hitung_statistik_dan_mortalitas, hitung_rl_31, hitu
 # ==========================================
 # 1. KONFIGURASI HALAMAN
 # ==========================================
-st.set_page_config(
-    page_title="SIM-RM Helper",
-    page_icon="",
-    layout="wide"
-)
+st.set_page_config(page_title="SIM-RM Helper", page_icon="", layout="wide")
 
 # Inisialisasi Supabase (Pastikan di Streamlit Secrets sudah ada url & key)
 try:
@@ -79,12 +74,10 @@ with tab_master:
             col1.write(f"**{ruang}**")
             st.session_state.master_tt[ruang] = col2.number_input(f"TT {ruang}", min_value=0, value=tt, label_visibility="collapsed", key=f"tt_{ruang}")
         if st.button(" Simpan Master TT"):
-            st.success("Master TT berhasil disimpan.")
+            st.success("Master TT disimpan.")
 
-    # FITUR MASTER ICD-10 (YANG TADI ILANG)
     st.subheader(" Master ICD-10")
     with st.container(border=True):
-        st.write("Upload file ICD-10 (.xlsx) dengan kolom CODE, DISPLAY, VERSION.")
         uploaded_icd = st.file_uploader("Pilih file ICD-10", type=["xlsx"], key="uploader_icd")
         
         if uploaded_icd:
@@ -92,15 +85,10 @@ with tab_master:
                 with st.spinner("Mengimpor data ICD-10..."):
                     try:
                         df_icd = pd.read_excel(uploaded_icd)
-                        # Ambil kolom yang dibutuhkan
                         df_icd = df_icd[['CODE', 'DISPLAY', 'VERSION']].dropna()
                         data_icd = df_icd.to_dict('records')
-                        
-                        # Insert batch (per 500 baris agar tidak timeout)
-                        batch_size = 500
-                        for i in range(0, len(data_icd), batch_size):
-                            batch = data_icd[i:i+batch_size]
-                            supabase.table('master_icd').upsert(batch, on_conflict='code').execute()
+                        for i in range(0, len(data_icd), 500):
+                            supabase.table('master_icd').upsert(data_icd[i:i+500], on_conflict='code').execute()
                             
                         st.success(f"✅ Berhasil mengimpor {len(data_icd)} kode ICD-10!")
                     except Exception as e:
@@ -120,12 +108,11 @@ with tab1:
                     latest = res.data[0]
                     data_json = latest['data_json']
                     if isinstance(data_json, str):
-                        import json
                         data_json = json.loads(data_json)
                     st.session_state.df_clean = pd.DataFrame(data_json)
                     st.success(f"✅ Berhasil memuat data dari file: {latest['nama_file']}")
                 else:
-                    st.warning("Belum ada riwayat data di database.")
+                    st.warning("Belum ada riwayat data.")
             except Exception as e:
                 st.error(f"Gagal memuat data: {e}")
     
@@ -252,6 +239,37 @@ with tab4:
             df_rl31 = hitung_rl_31(df_long)
             st.dataframe(df_rl31, use_container_width=True)
             
-        with st.expander(" RL 4a — Morbiditas Rawat Inap", expanded=False):
+        with st.expander(" RL 4a — Morbiditas Rawat Inap & ICD-10", expanded=False):
+            st.write("**Pemetaan Kode ICD-10 (Manual & Otomatis)**")
+            c_left, c_right = st.columns(2)
+            
+            with c_left:
+                st.write("**Manual**")
+                manual_diag = st.text_input("Diagnosa SIMRS (Ketik Manual)", key="manual_diag")
+                manual_kode = st.text_input("Kode ICD-10 (Ketik Manual)", key="manual_kode")
+                if st.button(" Simpan Pemetaan Manual"):
+                    if manual_diag and manual_kode:
+                        try:
+                            supabase.table('kamus_icd').upsert({'diagnosa_simrs': manual_diag, 'kode_icd': manual_kode}, on_conflict='diagnosa_simrs').execute()
+                            st.success("Pemetaan manual berhasil disimpan!")
+                        except Exception as e:
+                            st.error(f"Gagal simpan: {e}")
+                            
+            with c_right:
+                st.write("**Otomatis (Cari di Kamus)**")
+                search_icd = st.text_input("Cari Diagnosa di Kamus ICD-10", key="search_icd")
+                if search_icd:
+                    try:
+                        res = supabase.table('master_icd').select('code', 'display').ilike('display', f'%{search_icd}%').limit(5).execute()
+                        if res.data:
+                            opsi_icd = [f"{r['code']} - {r['display']}" for r in res.data]
+                            pilih_icd = st.selectbox("Pilih kode yang sesuai:", opsi_icd)
+                            if st.button("Gunakan Kode Otomatis Ini"):
+                                st.info(f"Kode {pilih_icd.split(' - ')[0]} siap digunakan (Fitur ini opsional untuk melengkapi tabel).")
+                        else:
+                            st.warning("Diagnosa tidak ditemukan di kamus.")
+                    except Exception as e:
+                        st.error(f"Gagal mencari: {e}")
+
             df_rl4a = hitung_rl_4a(df_long)
             st.dataframe(df_rl4a, use_container_width=True)
