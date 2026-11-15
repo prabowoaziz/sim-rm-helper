@@ -57,6 +57,17 @@ st.markdown("""
 
     /* Sidebar */
     [data-testid="stSidebar"] { background-color: #ffffff; border-right: 1px solid #e2e8f0; padding-top: 20px; }
+    /* Paksa Sidebar Muncul dan Beri Warna */
+    [data-testid="stSidebar"] {
+        display: block !important;
+        background-color: #ffffff !important;
+        border-right: 1px solid #e2e8f0;
+        box-shadow: 2px 0 5px rgba(0,0,0,0.05);
+        min-width: 260px !important;
+    }
+    [data-testid="collapsedControl"] {
+        display: block !important;
+    }
     [data-testid="stSidebar"] .stRadio > div { gap: 4px; }
     [data-testid="stSidebar"] .stRadio label { padding: 12px 16px; border-radius: 10px; font-weight: 600; color: #64748b; width: 100%; transition: all 0.2s; }
     [data-testid="stSidebar"] .stRadio label:hover { background-color: #f8fafc; color: #1e293b; }
@@ -68,7 +79,7 @@ st.markdown("""
         border: 1px solid #e2e8f0 !important;
         border-radius: 16px;
         padding: 24px !important;
-        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02);
+        box-shadow: 0 6px 18px rgba(15,23,42,0.08) !important;
         margin-bottom: 24px;
     }
 
