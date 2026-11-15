@@ -49,92 +49,44 @@ st.set_page_config(
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
-    /* Background & Font */
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
     .stApp { background-color: #f4f6f8; }
-
-    /* Sembunyikan elemen bawaan Streamlit */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
 
-    /* Sidebar Styling */
-    [data-testid="stSidebar"] {
-        background-color: #ffffff;
-        border-right: 1px solid #e2e8f0;
-        padding-top: 20px;
-    }
-    [data-testid="stSidebar"] .stRadio > div {
-        gap: 8px;
-    }
-    [data-testid="stSidebar"] .stRadio label {
-        padding: 12px 20px;
-        border-radius: 10px;
-        font-weight: 600;
-        color: #64748b;
-        transition: all 0.2s;
-        cursor: pointer;
-    }
-    [data-testid="stSidebar"] .stRadio label:hover {
-        background-color: #f8fafc;
-        color: #1e293b;
-    }
+    /* Sidebar */
+    [data-testid="stSidebar"] { background-color: #ffffff; border-right: 1px solid #e2e8f0; padding-top: 20px; }
+    [data-testid="stSidebar"] .stRadio > div { gap: 4px; }
+    [data-testid="stSidebar"] .stRadio label { padding: 12px 16px; border-radius: 10px; font-weight: 600; color: #64748b; width: 100%; transition: all 0.2s; }
+    [data-testid="stSidebar"] .stRadio label:hover { background-color: #f8fafc; color: #1e293b; }
+    [data-testid="stSidebar"] .stRadio div[aria-checked="true"] label { background-color: #e0f2fe; color: #0284c7; }
 
-    /* Card Container untuk konten */
-    div[data-testid="stVerticalBlock"] > div[style*="border"] {
+    /* Container Card (Kotak Putih) */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
         background-color: #ffffff;
         border: 1px solid #e2e8f0 !important;
         border-radius: 16px;
         padding: 24px !important;
         box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02);
+        margin-bottom: 24px;
     }
 
-    /* Card Metrics */
-    div[data-testid="stMetric"] {
-        background-color: #ffffff;
-        border: 1px solid #e2e8f0;
-        border-top: 4px solid #0ea5e9;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02);
-    }
+    /* Metrics */
+    div[data-testid="stMetric"] { background-color: #ffffff; border: 1px solid #e2e8f0; border-top: 4px solid #0ea5e9; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); }
+    div[data-testid="stMetric"] label { color: #64748b; font-weight: 600; font-size: 14px; }
+    div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #1e293b; font-weight: 700; font-size: 32px; }
 
-    /* Tombol Primary */
-    .stButton > button {
-        background-color: #0ea5e9;
-        color: white;
-        border-radius: 10px;
-        border: none;
-        padding: 12px 24px;
-        font-weight: 600;
-        font-size: 15px;
-        transition: all 0.2s;
-        width: 100%;
-    }
-    .stButton > button:hover {
-        background-color: #0284c7;
-        box-shadow: 0 4px 12px rgba(14,165,233,0.3);
-    }
+    /* Tombol */
+    .stButton > button { background-color: #0ea5e9; color: white; border-radius: 10px; border: none; padding: 12px 24px; font-weight: 600; font-size: 15px; width: 100%; transition: all 0.2s; }
+    .stButton > button:hover { background-color: #0284c7; box-shadow: 0 4px 12px rgba(14,165,233,0.3); color: white; }
 
-    /* Tombol Download (Hijau) */
-    .stDownloadButton > button {
-        background-color: #10b981;
-        color: white;
-        border-radius: 10px;
-        border: none;
-        font-weight: 600;
-    }
-    .stDownloadButton > button:hover {
-        background-color: #059669;
-    }
+    .stDownloadButton > button { background-color: #10b981; color: white; border-radius: 10px; border: none; font-weight: 600; padding: 10px 20px; transition: all 0.2s; }
+    .stDownloadButton > button:hover { background-color: #059669; color: white; }
 
-    /* Tabel Streamlit */
-    [data-testid="stDataFrame"] {
-        border: 1px solid #e2e8f0;
-        border-radius: 12px;
-        overflow: hidden;
-    }
+    /* Tabel & Expander */
+    [data-testid="stDataFrame"] { border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+    .streamlit-expanderHeader { font-weight: 600; color: #1e293b; background-color: #f8fafc; border-radius: 8px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -185,10 +137,6 @@ def muat_riwayat_upload_terakhir(client):
 
 supabase_client = get_supabase_client()
 
-st.markdown("<h1 style='text-align: center; color: #0f172a;'>🏥 SIM-RM Helper</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #64748b; font-size: 16px;'>Asisten Laporan Rekam Medis — Upload, Olah, Laporkan</p>", unsafe_allow_html=True)
-st.markdown("<br>", unsafe_allow_html=True)
-
 if "df_mentah" not in st.session_state:
     st.session_state.df_mentah = None
 
@@ -203,10 +151,15 @@ if "master_ruangan_loaded" not in st.session_state:
             st.session_state.master_ruangan_load_error = str(error)
     st.session_state.master_ruangan_loaded = True
 
-menu = st.sidebar.radio(
-    "Navigasi",
-    ["🏠 Dashboard", "📤 Upload Data", "🔁 Perpindahan Kamar", "🏥 BOR & Indikator", "📊 Laporan RL & Akreditasi", "⚙️ Master Data"],
-)
+with st.sidebar:
+    st.markdown(
+        "<h2 style='color:#0ea5e9; font-weight:700;'>🏥 SIM-RM Helper</h2>",
+        unsafe_allow_html=True,
+    )
+    menu = st.radio(
+        "Navigasi",
+        ["🏠 Dashboard", "📤 Upload Data", "🔁 Perpindahan Kamar", "🏥 BOR & Indikator", "📊 Laporan RL & Akreditasi", "⚙️ Master Data"],
+    )
 
 judul_halaman = {
     "🏠 Dashboard": "Dashboard",
