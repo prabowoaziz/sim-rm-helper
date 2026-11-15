@@ -27,8 +27,41 @@ st.markdown("""
     
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
+    /* Sembunyikan Header & Toolbar (Share, Edit, GitHub) */
+    [data-testid="stHeader"] { display: none !important; }
+    .stAppToolbar { display: none !important; }
+
+    /* Tombol Hide/Unhide Nempel di Garis Tengah */
+    [data-testid="collapsedControl"] {
+        position: fixed !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+        left: 280px !important;
+        background-color: #ffffff !important;
+        border: 1px solid #e2e8f0 !important;
+        border-left: none !important;
+        border-radius: 0 8px 8px 0 !important;
+        width: 28px !important;
+        height: 48px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        box-shadow: 2px 0 5px rgba(0,0,0,0.05) !important;
+        z-index: 9999 !important;
+        cursor: pointer !important;
+        transition: left 0.3s ease, background 0.2s !important;
+    }
+    [data-testid="collapsedControl"]:hover {
+        background-color: #f8fafc !important;
+    }
+    .stApp[data-test-script-state="sidebar-collapsed"] [data-testid="collapsedControl"],
+    [data-testid="stSidebar"][aria-expanded="false"] + div [data-testid="collapsedControl"] {
+        left: 0 !important;
+    }
+    [data-testid="stSidebar"] button[kind="header"] { display: none !important; }
+
     .block-container {
-        padding-top: 3rem !important;
+        padding-top: 2rem !important;
     }
     
     /* PAKSA SIDEBAR MUNCUL */
