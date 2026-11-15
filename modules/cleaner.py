@@ -11,20 +11,9 @@ def clean_nama(val):
 
 
 def clean_kelas(val):
-    """Standarkan label kelas jaminan menjadi VIP, 1, 2, atau 3."""
-    if pd.isna(val):
-        return "Tidak Diketahui"
+    if pd.isna(val): return "Tidak Diketahui"
     s = str(val).strip().upper()
-    if not s:
-        return "Tidak Diketahui"
-    s = re.sub(r'^(KELAS|CLASS)\s*', '', s).strip()
-    s = re.sub(r'\s+', ' ', s)
-    if s.startswith('VIP'):
-        return 'VIP'
-    m = re.match(r'^([1-3])(?:\.0)?(?:\b|\s|[-/])', s)
-    if m:
-        return m.group(1)
-    if s in {'1', '2', '3'}:
+    if s in ['VIP', '1', '2', '3']:
         return s
     return "Tidak Diketahui"
 
