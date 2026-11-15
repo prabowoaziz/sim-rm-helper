@@ -21,13 +21,15 @@ def clean_kelas(val):
 def split_jk_umur(val):
     if pd.isna(val): return None, None
     s = str(val).strip()
-    m = re.match(r'([A-Za-z]+)\s*\((\d+)\s*(Th|Bl|Hr)?\)', s, re.IGNORECASE)
+    m = re.search(r'\((\d+)\s*(Th|Bl|Hr)?\)', s, re.IGNORECASE)
     if not m:
-        jk_only = re.match(r'([A-Za-z]+)', s)
+        jk_only = re.fullmatch(r'\s*([LPFM])\s*', s, re.IGNORECASE)
         return (jk_only.group(1).upper() if jk_only else None), None
-    jk = m.group(1).upper()
-    angka = int(m.group(2))
-    satuan = (m.group(3) or 'Th').lower()
+    prefix = s[:m.start()].strip()
+    jk_match = re.fullmatch(r'([LPFM])', prefix, re.IGNORECASE)
+    jk = jk_match.group(1).upper() if jk_match else None
+    angka = int(m.group(1))
+    satuan = (m.group(2) or 'Th').lower()
     if satuan == 'bl': umur = round(angka / 12, 2)
     elif satuan == 'hr': umur = round(angka / 365, 2)
     else: umur = float(angka)
