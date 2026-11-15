@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import io
 
-# Import modul internal
+# Import modul internal (Sesuaikan jika nama fungsinya beda)
 from modules.loader import get_sheet_names, load_sheet_by_name
 from modules.cleaner import clean_nama, split_jk_umur, parse_kamar, clean_kelas
 from modules.tracker import track_perpindahan
@@ -10,105 +10,40 @@ from modules.bor_calculator import hitung_bor
 from modules.reporter import hitung_statistik_dan_mortalitas, hitung_rl_31, hitung_rl_4a
 
 # ==========================================
-# 1. KONFIGURASI HALAMAN & CSS (PAKSA SIDEBAR)
+# 1. KONFIGURASI HALAMAN
 # ==========================================
 st.set_page_config(
     page_title="SIM-RM Helper",
-    page_icon="🏥",
+    page_icon="",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
+# CSS Sederhana (Hanya untuk merapikan Card dan Tombol)
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
     .stApp { background-color: #f4f6f8; }
     
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    /* Sembunyikan Header & Toolbar (Share, Edit, GitHub) */
-    [data-testid="stHeader"] { display: none !important; }
-    .stAppToolbar { display: none !important; }
-
-    /* Tombol Hide/Unhide Nempel di Garis Tengah */
-    [data-testid="collapsedControl"] {
-        position: fixed !important;
-        top: 50% !important;
-        transform: translateY(-50%) !important;
-        left: 280px !important;
-        background-color: #ffffff !important;
-        border: 1px solid #e2e8f0 !important;
-        border-left: none !important;
-        border-radius: 0 8px 8px 0 !important;
-        width: 28px !important;
-        height: 48px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        box-shadow: 2px 0 5px rgba(0,0,0,0.05) !important;
-        z-index: 9999 !important;
-        cursor: pointer !important;
-        transition: left 0.3s ease, background 0.2s !important;
-    }
-    [data-testid="collapsedControl"]:hover {
-        background-color: #f8fafc !important;
-    }
-    .stApp[data-test-script-state="sidebar-collapsed"] [data-testid="collapsedControl"],
-    [data-testid="stSidebar"][aria-expanded="false"] + div [data-testid="collapsedControl"] {
-        left: 0 !important;
-    }
-    [data-testid="stSidebar"] button[kind="header"] { display: none !important; }
-
-    .block-container {
-        padding-top: 2rem !important;
-    }
-    
-    /* PAKSA SIDEBAR MUNCUL */
-    [data-testid="stSidebar"] {
-        display: block !important;
-        background-color: #ffffff !important;
-        border-right: 1px solid #e2e8f0;
-        box-shadow: 2px 0 10px rgba(0,0,0,0.03);
-        min-width: 280px !important;
-        padding-top: 20px;
-    }
-    
-    /* Styling Radio Button di Sidebar */
-    [data-testid="stSidebar"] .stRadio > div { gap: 4px; }
-    [data-testid="stSidebar"] .stRadio label {
-        padding: 12px 16px; border-radius: 10px; font-weight: 600;
-        color: #64748b; width: 100%; transition: all 0.2s; cursor: pointer;
-    }
-    [data-testid="stSidebar"] .stRadio label:hover { background-color: #f8fafc; color: #1e293b; }
-    [data-testid="stSidebar"] .stRadio div[aria-checked="true"] label {
-        background-color: #e0f2fe; color: #0284c7;
-    }
-
-    /* Container Card (Kotak Putih) */
+    /* Styling Container */
     div[data-testid="stVerticalBlockBorderWrapper"] {
         background-color: #ffffff; border: 1px solid #e2e8f0 !important;
-        border-radius: 16px; padding: 24px !important;
-        box-shadow: 0 6px 18px rgba(15,23,42,0.08); margin-bottom: 24px;
+        border-radius: 12px; padding: 20px !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
     }
     
-    /* Metrics */
-    div[data-testid="stMetric"] {
-        background-color: #ffffff; border: 1px solid #e2e8f0;
-        border-top: 4px solid #0ea5e9; padding: 20px; border-radius: 12px;
-    }
-    
-    /* Tombol Biru */
+    /* Styling Tombol */
     .stButton > button {
-        background-color: #0ea5e9; color: white; border-radius: 10px;
-        border: none; padding: 12px 24px; font-weight: 600; width: 100%;
+        background-color: #0ea5e9; color: white; border-radius: 8px;
+        border: none; padding: 10px 20px; font-weight: 600; width: 100%;
     }
     .stButton > button:hover { background-color: #0284c7; color: white; }
     
-    /* Tombol Hijau (Download) */
+    /* Styling Download Button */
     .stDownloadButton > button {
-        background-color: #10b981; color: white; border-radius: 10px;
-        border: none; font-weight: 600; padding: 10px 20px;
+        background-color: #10b981; color: white; border-radius: 8px;
+        border: none; font-weight: 600;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -121,13 +56,14 @@ if "df_clean" not in st.session_state: st.session_state.df_clean = None
 if "master_tt" not in st.session_state: st.session_state.master_tt = {"HCU": 6, "ICU": 4, "NICU": 3, "PICU": 2, "Ar Rahmah-1": 10, "Marwah-1": 8, "Kenanga": 10}
 
 # ==========================================
-# 3. SIDEBAR NAVIGATION
+# 3. SIDEBAR NAVIGATION (PAKAI CARA STANDAR)
 # ==========================================
 with st.sidebar:
-    st.markdown("<h2 style='color:#0ea5e9; font-weight:700; margin-bottom:20px;'>🏥 SIM-RM Helper</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#0ea5e9;'> SIM-RM Helper</h2>", unsafe_allow_html=True)
+    st.markdown("---")
     menu = st.radio(
         "Navigasi Menu",
-        ["🏠 Dashboard", "📤 Upload Data", "🔁 Perpindahan Kamar", "🏥 BOR & Indikator", "📊 Laporan RL & Akreditasi", "⚙️ Master Data"]
+        [" Dashboard", " Upload Data", " Perpindahan Kamar", " BOR & Indikator", " Laporan RL & Akreditasi", "⚙️ Master Data"]
     )
     st.markdown("---")
     st.caption("© 2026 SIM-RM Helper.")
@@ -137,15 +73,15 @@ with st.sidebar:
 # ==========================================
 
 # --- MENU: DASHBOARD ---
-if menu == "🏠 Dashboard":
-    st.title("🏠 Dashboard")
+if menu == " Dashboard":
+    st.title(" Dashboard")
     st.caption("Ringkasan operasional Rekam Medis")
     
     with st.container(border=True):
         st.subheader("Unggah Cepat")
         uploaded_dash = st.file_uploader("Unggah data SIMRS di sini", type=["xlsx", "xls"], key="uploader_dash")
         if uploaded_dash:
-            st.info("File diterima. Silakan buka menu '📤 Upload Data' di kiri untuk proses pemetaan.")
+            st.info("File diterima. Silakan buka menu ' Upload Data' di kiri untuk proses pemetaan.")
 
     if st.session_state.df_clean is not None:
         df = st.session_state.df_clean
@@ -165,8 +101,8 @@ if menu == "🏠 Dashboard":
         st.info("Belum ada data. Silakan unggah melalui menu Upload Data.")
 
 # --- MENU: UPLOAD DATA ---
-elif menu == "📤 Upload Data":
-    st.title("📤 Upload Data SIMRS")
+elif menu == " Upload Data":
+    st.title(" Upload Data SIMRS")
     st.caption("Unggah file Excel mentah, lakukan pemetaan, lalu proses data.")
     
     with st.container(border=True):
@@ -176,7 +112,7 @@ elif menu == "📤 Upload Data":
             sheet_names = get_sheet_names(file_bytes, uploaded.name)
             
             if sheet_names:
-                selected_sheet = st.selectbox("📑 Pilih Sheet:", sheet_names) if len(sheet_names) > 1 else sheet_names[0]
+                selected_sheet = st.selectbox(" Pilih Sheet:", sheet_names) if len(sheet_names) > 1 else sheet_names[0]
                 df, error = load_sheet_by_name(file_bytes, selected_sheet)
                 
                 if error:
@@ -201,7 +137,7 @@ elif menu == "📤 Upload Data":
                         map_status = st.selectbox("Kolom Status Pulang", kolom_options, index=kolom_options.index('status_pulang') if 'status_pulang' in kolom_options else 0)
                         map_kelas = st.selectbox("Kolom Kelas Jaminan", kolom_options, index=kolom_options.index('kelas_jaminan') if 'kelas_jaminan' in kolom_options else 0)
                     
-                    if st.button("🚀 Proses Data Pasien"):
+                    if st.button(" Proses Data Pasien"):
                         data_bersih = []
                         for idx, row in df.iterrows():
                             raw_nama = row[map_nama] if map_nama != "— Pilih kolom —" else ""
@@ -239,8 +175,8 @@ elif menu == "📤 Upload Data":
             st.download_button("⬇️ Download Data Bersih (Excel)", data=buf.getvalue(), file_name="Data_Bersih.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 # --- MENU: PERPINDAHAN KAMAR ---
-elif menu == "🔁 Perpindahan Kamar":
-    st.title("🔁 Track Perpindahan Kamar")
+elif menu == " Perpindahan Kamar":
+    st.title(" Track Perpindahan Kamar")
     if st.session_state.df_clean is None:
         st.info("Silakan upload dan proses data di menu Upload Data terlebih dahulu.")
     else:
@@ -249,8 +185,8 @@ elif menu == "🔁 Perpindahan Kamar":
             st.dataframe(df_long, use_container_width=True)
 
 # --- MENU: BOR & INDIKATOR ---
-elif menu == "🏥 BOR & Indikator":
-    st.title("🏥 BOR & Indikator")
+elif menu == " BOR & Indikator":
+    st.title(" BOR & Indikator")
     if st.session_state.df_clean is None:
         st.info("Silakan upload dan proses data di menu Upload Data terlebih dahulu.")
     else:
@@ -269,23 +205,23 @@ elif menu == "🏥 BOR & Indikator":
                 st.dataframe(df_bor, use_container_width=True, hide_index=True)
 
 # --- MENU: LAPORAN ---
-elif menu == "📊 Laporan RL & Akreditasi":
-    st.title("📊 Laporan RL & Akreditasi")
+elif menu == " Laporan RL & Akreditasi":
+    st.title(" Laporan RL & Akreditasi")
     if st.session_state.df_clean is None:
         st.info("Silakan upload dan proses data di menu Upload Data terlebih dahulu.")
     else:
         df_long = track_perpindahan(st.session_state.df_clean)
         
-        with st.expander("📈 Laporan Statistik & Mortalitas", expanded=False):
+        with st.expander(" Laporan Statistik & Mortalitas", expanded=False):
             status_counts, mortalitas_df = hitung_statistik_dan_mortalitas(df_long)
             st.dataframe(status_counts, use_container_width=True)
             st.dataframe(mortalitas_df, use_container_width=True)
             
-        with st.expander("📋 RL 3.1 — Kegiatan Ranap", expanded=False):
+        with st.expander(" RL 3.1 — Kegiatan Ranap", expanded=False):
             df_rl31 = hitung_rl_31(df_long)
             st.dataframe(df_rl31, use_container_width=True)
             
-        with st.expander("📋 RL 4a — Morbiditas Rawat Inap", expanded=False):
+        with st.expander(" RL 4a — Morbiditas Rawat Inap", expanded=False):
             df_rl4a = hitung_rl_4a(df_long)
             st.dataframe(df_rl4a, use_container_width=True)
 
@@ -294,14 +230,14 @@ elif menu == "⚙️ Master Data":
     st.title("⚙️ Master Data")
     
     with st.container(border=True):
-        st.subheader("🛏️ Master Tempat Tidur (TT)")
+        st.subheader("️ Master Tempat Tidur (TT)")
         for ruang, tt in list(st.session_state.master_tt.items()):
             col1, col2 = st.columns([3, 1])
             col1.write(f"**{ruang}**")
             st.session_state.master_tt[ruang] = col2.number_input(f"TT {ruang}", min_value=0, value=tt, label_visibility="collapsed")
-        if st.button("💾 Simpan Master TT"):
+        if st.button(" Simpan Master TT"):
             st.success("Master TT berhasil disimpan.")
 
     with st.container(border=True):
-        st.subheader("🏥 Master ICD-10")
+        st.subheader(" Master ICD-10")
         st.info("Fitur import kamus ICD-10 tersedia di sini.")
