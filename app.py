@@ -322,6 +322,21 @@ with tab_master:
             st.warning("Master Kelas Kamar diperbarui di sesi ini, tetapi belum tersimpan ke Supabase.")
 
     st.subheader("🧾 Master ICD-10")
+    if supabase_client is None:
+        st.info("Total kamus ICD-10 di database: tidak tersedia (Supabase belum dikonfigurasi).")
+    else:
+        try:
+            jumlah_master_icd = (
+                supabase_client.table("master_icd")
+                .select("code", count="exact")
+                .limit(0)
+                .execute()
+                .count
+            )
+            st.info(f"Total kamus ICD-10 di database: {jumlah_master_icd or 0:,} baris.")
+        except Exception as error:
+            st.warning(f"Jumlah kamus ICD-10 gagal dimuat: {error}")
+
     icd_file = st.file_uploader("Upload file ICD-10 (.xlsx)", type=["xlsx"], key="upload_master_icd")
     if icd_file is not None:
         icd_bytes = icd_file.getvalue()
@@ -740,9 +755,16 @@ with tab4:
                             if item.get("code") is not None
                         }
                         if icd_by_code:
+                            kode_sebelumnya = st.session_state.get("icd_kode_terpilih")
+                            index_kode = (
+                                list(icd_by_code).index(kode_sebelumnya)
+                                if kode_sebelumnya in icd_by_code
+                                else 0
+                            )
                             kode_terpilih = st.selectbox(
                                 "Pilih kode ICD-10 yang sesuai",
                                 options=list(icd_by_code),
+                                index=index_kode,
                                 format_func=lambda code: f"{code} — {icd_by_code[code].get('display', '')}",
                                 key="icd_diagnosa_code",
                             )
@@ -753,6 +775,7 @@ with tab4:
                                 f"(Versi {data_icd_terpilih.get('version', '—')})"
                             )
                         else:
+                            st.session_state.pop("icd_kode_terpilih", None)
                             st.info("Tidak ada kode ICD-10 yang cocok dengan teks tersebut.")
                     except Exception as error:
                         st.error(f"Pencarian ICD-10 gagal: {error}")
