@@ -3,7 +3,7 @@ import pandas as pd
 import io
 from pathlib import Path
 from modules.loader import get_sheet_names, load_sheet_by_name
-from modules.cleaner import clean_nama, clean_kelas, cek_kelas_titipan, guess_column_types, split_jk_umur, kategori_umur, parse_kamar
+from modules.cleaner import clean_nama, clean_kelas, guess_column_types, guess_jk_from_nama, split_jk_umur, kategori_umur, parse_kamar
 from modules.tracker import track_perpindahan
 from modules.master_data import init_master_tt, update_master_tt, init_master_kelas, update_master_kelas
 from modules.bor_calculator import hitung_bor, hitung_bor_kelas, hitung_rata_rata_bor_kelas
@@ -164,6 +164,7 @@ with tab1:
                     kolom_tgl_masuk = st.selectbox("Kolom Tanggal Masuk", pilihan, index=default_index(["tgl masuk", "tanggal masuk", "tgl_masuk", "masuk"], tebakan_kolom["tgl_masuk"]), key="map_tgl_masuk")
                     kolom_tgl_keluar = st.selectbox("Kolom Tanggal Keluar", pilihan, index=default_index(["tgl keluar", "tanggal keluar", "tgl_keluar", "keluar"], tebakan_kolom["tgl_keluar"]), key="map_tgl_keluar")
                     kolom_kelas = st.selectbox("Kolom Kelas Jaminan (VIP/1/2/3)", pilihan, index=default_index(["kelas jaminan", "kelas_jam", "jaminan", "kelas"]), key="map_kelas_jaminan")
+                    kolom_status = st.selectbox("Kolom Status Pulang (Sembuh/Meninggal)", pilihan, index=default_index(["status pulang", "status_pulang", "status", "pulang"]), key="map_status_pulang")
 
                 if st.button("🚀 Proses Data"):
                     with st.spinner("Membersihkan data..."):
@@ -183,6 +184,8 @@ with tab1:
                             jk, umur = split_jk_umur(f"{raw_nama} {raw_jk_umur}".strip())
                             if jk is None and umur is None:
                                 jk, umur = split_jk_umur(raw_nama)
+                            if jk is None:
+                                jk = guess_jk_from_nama(raw_nama)
 
                             nama_bersih = clean_nama(raw_nama)
                             raw_kamar = nilai_baris(row, kolom_kamar) or ""
@@ -194,11 +197,37 @@ with tab1:
                                 if raw_tgl_keluar is not None else pd.NaT
                             )
                             raw_kelas = nilai_baris(row, kolom_kelas)
-                            kelas_jam = clean_kelas(
-                                raw_kelas if raw_kelas is not None else kelas_kamar
+                            master_kelas = st.session_state.get("master_kelas", {})
+                            kelas_fisik_raw = master_kelas.get(ruang, kelas_kamar)
+
+                            def kelas_standar(nilai):
+                                if nilai is None:
+                                    return ""
+                                teks = str(nilai).strip().upper()
+                                if teks in {"1.0", "2.0", "3.0"}:
+                                    teks = teks[0]
+                                return teks if teks in {"1", "2", "3", "VIP"} else ""
+
+                            kelas_excel = kelas_standar(raw_kelas)
+                            kelas_fisik = kelas_standar(kelas_fisik_raw)
+                            is_titipan = (
+                                kelas_excel in {"1", "2", "3", "VIP"}
+                                and kelas_fisik in {"1", "2", "3", "VIP"}
+                                and kelas_excel != kelas_fisik
                             )
+                            kelas_jam = clean_kelas(kelas_excel or kelas_fisik)
                             no_rm = nilai_baris(row, kolom_no_rm)
-                            no_rm = str(no_rm).strip() if no_rm is not None else None
+                            if no_rm is None:
+                                no_rm = None
+                            elif isinstance(no_rm, (int, float)) and float(no_rm).is_integer():
+                                no_rm = str(int(no_rm))
+                            else:
+                                no_rm = str(no_rm).strip()
+                                if "." in no_rm:
+                                    bagian_bilangan = no_rm.split(".", 1)
+                                    if bagian_bilangan[0].isdigit() and not bagian_bilangan[1].strip("0"):
+                                        no_rm = bagian_bilangan[0]
+                            status_raw = nilai_baris(row, kolom_status)
 
                             data_bersih.append({
                                 "no_rm": no_rm or None,
@@ -213,20 +242,18 @@ with tab1:
                                 "kelas": kelas_kamar,
                                 "tgl_masuk": tgl_masuk,
                                 "tgl_keluar": tgl_keluar,
-                                "status_pulang": row.get("status_pulang", None),
+                                "status_pulang": status_raw,
+                                "is_titipan": is_titipan,
                             })
 
                         kolom_bersih = [
                             "no_rm", "nama", "jenis_kelamin", "umur_tahun", "kategori_umur",
                             "penjamin", "kelas_jam", "kode_kamar", "ruang", "kelas",
-                            "tgl_masuk", "tgl_keluar", "status_pulang",
+                            "tgl_masuk", "tgl_keluar", "status_pulang", "is_titipan",
                         ]
                         df_clean = pd.DataFrame(data_bersih, columns=kolom_bersih)
                         df_clean = df_clean.dropna(subset=["nama", "no_rm"])
-                        master_kelas = st.session_state.get("master_kelas", {})
-                        df_clean["is_titipan"] = df_clean.apply(
-                            lambda clean_row: cek_kelas_titipan(clean_row, master_kelas), axis=1
-                        )
+                        df_clean = df_clean.reset_index(drop=True)
                         st.session_state.df_clean = df_clean
                     st.success("✅ Data berhasil dibersihkan!")
 

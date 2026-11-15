@@ -123,6 +123,15 @@ def cek_kelas_titipan(row, master_kelas):
     return kelas_jaminan != str(kelas_kamar).strip().upper() if kelas_kamar is not None else True
 
 
+def guess_jk_from_nama(nama):
+    if nama is None or pd.isna(nama): return None
+    if not str(nama).strip(): return None
+    s = str(nama).upper()
+    if any(w in s for w in ["NYONYA", "NY.", " NY ", "NN", "NONA", "HAJAH", "HJ.", "IBU", "PUAN", "SITI"]): return 'P'
+    if any(w in s for w in ["TUAN", "TN.", " TN ", "BAPAK", "BPK", "HAJI", "HJ", "OM"]): return 'L'
+    return None
+
+
 def split_jk_umur(val):
     if pd.isna(val): return None, None
     s = re.sub(r'\s*\(\s*null\s*\)\s*$', '', str(val).strip(), flags=re.IGNORECASE)
