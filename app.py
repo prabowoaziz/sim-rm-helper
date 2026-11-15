@@ -506,10 +506,12 @@ with tab4:
     df_clean = st.session_state.get("df_clean")
     if df_clean is None or df_clean.empty:
         st.info("Silakan upload dan proses data di Tab Upload terlebih dahulu.")
+        df_long = pd.DataFrame()
     else:
         df_long = track_perpindahan(df_clean)
-        status_counts, mortalitas_df = hitung_statistik_dan_mortalitas(df_long)
 
+    status_counts, mortalitas_df = hitung_statistik_dan_mortalitas(df_long)
+    with st.expander("📊 Laporan Statistik & Mortalitas", expanded=False):
         st.subheader("📈 Statistik Pasien")
         st.dataframe(status_counts, use_container_width=True, hide_index=True)
         statistik_buffer = io.BytesIO()
@@ -534,7 +536,7 @@ with tab4:
             key="download_mortalitas",
         )
 
-        st.subheader("📋 RL 3.1 — Kegiatan Pelayanan Ranap")
+    with st.expander("📋 RL 3.1 — Kegiatan Pelayanan Ranap", expanded=False):
         rl_31_df = hitung_rl_31(df_long)
         st.dataframe(rl_31_df, use_container_width=True, hide_index=True)
         rl_31_buffer = io.BytesIO()
@@ -547,7 +549,7 @@ with tab4:
             key="download_rl_31",
         )
 
-        st.subheader("📋 RL 4a — Morbiditas Rawat Inap (Top 10)")
+    with st.expander("📋 RL 4a — Morbiditas Rawat Inap", expanded=False):
         rl_4a_df = hitung_rl_4a(df_long)
         st.dataframe(rl_4a_df, use_container_width=True, hide_index=True)
         rl_4a_buffer = io.BytesIO()
@@ -560,20 +562,28 @@ with tab4:
             key="download_rl_4a",
         )
 
-    st.subheader("📝 Audit KLPCM (Kelengkapan Rekam Medis)")
-    with st.form("form_klpcm"):
-        jumlah_diaudit = st.number_input("Jumlah RM yang diaudit", min_value=1, value=20)
-        jumlah_lengkap = st.number_input(
-            "RM Lengkap (Identitas, Diagnosa, TTD Dokter, dll)",
-            min_value=0,
-            value=15,
-        )
-        hitung_klpcm = st.form_submit_button("Hitung KLPCM")
+    with st.expander(
+        "📝 Audit KLPCM (Kelengkapan Rekam Medis)",
+        expanded=st.session_state.get("klpcm_expanded", False),
+    ):
+        with st.form("form_klpcm"):
+            jumlah_diaudit = st.number_input("Jumlah RM yang diaudit", min_value=1, value=20)
+            jumlah_lengkap = st.number_input(
+                "RM Lengkap (Identitas, Diagnosa, TTD Dokter, dll)",
+                min_value=0,
+                value=15,
+            )
+            hitung_klpcm = st.form_submit_button("Hitung KLPCM")
 
-    if hitung_klpcm:
-        persentase = (jumlah_lengkap / jumlah_diaudit) * 100
-        st.metric("Persentase KLPCM", f"{persentase:.2f}%")
-        if persentase >= 80:
-            st.success("✅ Memenuhi standar akreditasi (≥ 80%)")
-        else:
-            st.error("❌ Belum memenuhi standar akreditasi (< 80%)")
+        if hitung_klpcm:
+            st.session_state.klpcm_persentase = (jumlah_lengkap / jumlah_diaudit) * 100
+            st.session_state.klpcm_expanded = True
+            st.rerun()
+
+        if "klpcm_persentase" in st.session_state:
+            persentase = st.session_state.klpcm_persentase
+            st.metric("Persentase KLPCM", f"{persentase:.2f}%")
+            if persentase >= 80:
+                st.success("✅ Memenuhi standar akreditasi (≥ 80%)")
+            else:
+                st.error("❌ Belum memenuhi standar akreditasi (< 80%)")
