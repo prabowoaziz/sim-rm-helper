@@ -3,10 +3,16 @@ import pandas as pd
 
 def track_perpindahan(df):
     """Menerima df_clean dan mengembalikan detail perjalanan pasien per kamar."""
-    if df.empty:
-        return df.copy()
-
     d = df.copy()
+    # Sediakan kolom dasar agar data lama atau tidak lengkap tetap dapat diproses.
+    kolom_dasar = [
+        'no_rm', 'nama', 'kode_kamar', 'ruang', 'kelas', 'tgl_masuk',
+        'tgl_keluar', 'status_pulang',
+    ]
+    for kolom in kolom_dasar:
+        if kolom not in d.columns:
+            d[kolom] = pd.NA
+
     # Buang Transit IGD dari hitungan
     d = d[~d['kode_kamar'].astype(str).str.contains('TIG|Transit IGD', case=False, na=False)]
     # Buang baris yang tidak punya no_rm atau kamar
@@ -38,4 +44,5 @@ def track_perpindahan(df):
     if 'status_pulang' in d.columns:
         kolom_long.append('status_pulang')
 
-    return d[kolom_long].copy()
+    kolom_tersedia = [col for col in kolom_long if col in d.columns]
+    return d[kolom_tersedia].copy()
