@@ -29,6 +29,8 @@ def track_perpindahan(df):
     d['kamar'] = d['kode_kamar'].astype(str) + ' ' + d['ruang'].fillna('').astype(str)
 
     kolom_long = ['no_rm', 'nama', 'urutan', 'kamar', 'ruang', 'kelas', 'tgl_masuk', 'tgl_keluar', 'masuk', 'pindah', 'dipindahkan']
+    if 'kelas_jam' in d.columns:
+        kolom_long.append('kelas_jam')
     # Handle jika ada kolom status_pulang, masukkan juga
     if 'status_pulang' in d.columns:
         kolom_long.append('status_pulang')

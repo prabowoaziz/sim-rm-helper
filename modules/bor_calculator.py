@@ -64,3 +64,69 @@ def hitung_bor(df_long, master_tt, periode_hari=30):
         })
 
     return pd.DataFrame(hasil)
+
+
+def hitung_bor_kelas(df_mutasi, kapasitas_tt=35):
+    """Hitung okupansi harian dan BOR untuk kelas jaminan VIP, 1, 2, dan 3."""
+    columns = [
+        'tanggal', 'VIP', 'BOR_VIP', 'Kelas_1', 'BOR_1', 'Kelas_2', 'BOR_2',
+        'Kelas_3', 'BOR_3', 'Total_Pasien', 'BOR_Total',
+    ]
+    if df_mutasi.empty or kapasitas_tt <= 0:
+        return pd.DataFrame(columns=columns)
+
+    required = {'tgl_masuk', 'tgl_keluar', 'kelas_jam'}
+    if not required.issubset(df_mutasi.columns):
+        return pd.DataFrame(columns=columns)
+
+    d = df_mutasi.copy()
+    d['tgl_masuk'] = pd.to_datetime(d['tgl_masuk'], errors='coerce').dt.normalize()
+    d['tgl_keluar'] = pd.to_datetime(d['tgl_keluar'], errors='coerce').dt.normalize()
+    d = d[d['tgl_masuk'].notna()]
+    if d.empty:
+        return pd.DataFrame(columns=columns)
+
+    tanggal_awal = d['tgl_masuk'].min()
+    tanggal_akhir = max(d['tgl_masuk'].max(), d['tgl_keluar'].max())
+    tanggal_semua = pd.date_range(tanggal_awal, tanggal_akhir, freq='D')
+    kelas = d['kelas_jam'].fillna('Tidak Diketahui').astype(str).str.strip().str.upper()
+    kelas = kelas.replace({'': 'TIDAK DIKETAHUI', 'KELAS 1': '1', 'KELAS 2': '2', 'KELAS 3': '3'})
+    kelas = kelas.where(~kelas.str.startswith('VIP'), 'VIP')
+    occupancy = {key: [] for key in ('VIP', '1', '2', '3')}
+
+    for tanggal in tanggal_semua:
+        # Tanggal keluar tidak dihitung sebagai hari rawat, sesuai konvensi hari rawat.
+        aktif = d[
+            (d['tgl_masuk'] <= tanggal)
+            & (d['tgl_keluar'].isna() | (d['tgl_keluar'] > tanggal))
+        ]
+        aktif_kelas = kelas.loc[aktif.index]
+        counts = aktif_kelas.value_counts()
+        for key in occupancy:
+            occupancy[key].append(int(counts.get(key, 0)))
+
+    result = pd.DataFrame({
+        'tanggal': tanggal_semua,
+        'VIP': occupancy['VIP'],
+        'BOR_VIP': [round(count / kapasitas_tt * 100, 2) for count in occupancy['VIP']],
+        'Kelas_1': occupancy['1'],
+        'BOR_1': [round(count / kapasitas_tt * 100, 2) for count in occupancy['1']],
+        'Kelas_2': occupancy['2'],
+        'BOR_2': [round(count / kapasitas_tt * 100, 2) for count in occupancy['2']],
+        'Kelas_3': occupancy['3'],
+        'BOR_3': [round(count / kapasitas_tt * 100, 2) for count in occupancy['3']],
+    })
+    result['Total_Pasien'] = result[['VIP', 'Kelas_1', 'Kelas_2', 'Kelas_3']].sum(axis=1)
+    result['BOR_Total'] = (result['Total_Pasien'] / kapasitas_tt * 100).round(2)
+    return result[columns]
+
+
+def hitung_rata_rata_bor_kelas(df_bor_kelas):
+    """Kembalikan rata-rata BOR harian untuk tiap kelas dan total."""
+    bor_columns = ['BOR_VIP', 'BOR_1', 'BOR_2', 'BOR_3', 'BOR_Total']
+    if df_bor_kelas.empty:
+        return {column: 0.0 for column in bor_columns}
+    return {
+        column: float(df_bor_kelas[column].mean()) if column in df_bor_kelas else 0.0
+        for column in bor_columns
+    }

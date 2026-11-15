@@ -2,10 +2,10 @@ import streamlit as st
 import pandas as pd
 import io
 from modules.loader import get_sheet_names, load_data
-from modules.cleaner import clean_nama, split_jk_umur, kategori_umur, parse_kamar
+from modules.cleaner import clean_nama, clean_kelas, split_jk_umur, kategori_umur, parse_kamar
 from modules.tracker import track_perpindahan
 from modules.master_data import init_master_tt, update_master_tt
-from modules.bor_calculator import hitung_bor
+from modules.bor_calculator import hitung_bor, hitung_bor_kelas, hitung_rata_rata_bor_kelas
 
 st.set_page_config(
     page_title="SIM-RM Helper",
@@ -134,6 +134,7 @@ with tab1:
                 with map_col3:
                     kolom_tgl_masuk = st.selectbox("Kolom Tanggal Masuk", pilihan, index=default_index(["tgl masuk", "tanggal masuk", "tgl_masuk", "masuk"]), key="map_tgl_masuk")
                     kolom_tgl_keluar = st.selectbox("Kolom Tanggal Keluar", pilihan, index=default_index(["tgl keluar", "tanggal keluar", "tgl_keluar", "keluar"]), key="map_tgl_keluar")
+                    kolom_kelas = st.selectbox("Kolom Kelas Jaminan (VIP/1/2/3)", pilihan, index=default_index(["kelas jaminan", "kelas_jam", "jaminan", "kelas"]), key="map_kelas_jaminan")
 
                 if st.button("🚀 Proses Data"):
                     def nilai_kolom(nama_kolom):
@@ -149,6 +150,7 @@ with tab1:
                         "jenis_kelamin": jk_umur.apply(lambda hasil: hasil[0]),
                         "umur_tahun": jk_umur.apply(lambda hasil: hasil[1]),
                         "kategori_umur": jk_umur.apply(lambda hasil: kategori_umur(hasil[1])),
+                        "kelas_jam": nilai_kolom(kolom_kelas).apply(clean_kelas),
                         "kode_kamar": kamar.apply(lambda hasil: hasil[0]),
                         "ruang": kamar.apply(lambda hasil: hasil[1]),
                         "kelas": kamar.apply(lambda hasil: hasil[2]),
@@ -222,6 +224,20 @@ with tab3:
                 file_name="hasil_bor.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
+
+            st.markdown("### BOR per Kelas (Kapasitas 35 TT)")
+            df_bor_kelas = hitung_bor_kelas(df_long, kapasitas_tt=35)
+            if df_bor_kelas.empty:
+                st.info("Belum ada data BOR per kelas yang dapat dihitung.")
+            else:
+                rata_rata = hitung_rata_rata_bor_kelas(df_bor_kelas)
+                metrik = st.columns(5)
+                metrik[0].metric("BOR VIP", f"{rata_rata['BOR_VIP']:.2f}%")
+                metrik[1].metric("BOR Kelas 1", f"{rata_rata['BOR_1']:.2f}%")
+                metrik[2].metric("BOR Kelas 2", f"{rata_rata['BOR_2']:.2f}%")
+                metrik[3].metric("BOR Kelas 3", f"{rata_rata['BOR_3']:.2f}%")
+                metrik[4].metric("BOR Total", f"{rata_rata['BOR_Total']:.2f}%")
+                st.dataframe(df_bor_kelas, use_container_width=True, hide_index=True)
 
 with tab4:
     st.subheader("📊 Laporan RL & Akreditasi")
