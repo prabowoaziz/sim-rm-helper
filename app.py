@@ -260,7 +260,7 @@ with tab4:
                 search_icd = st.text_input("Cari Diagnosa di Kamus ICD-10", key="search_icd")
                 if search_icd:
                     try:
-                        res = supabase.table('master_icd').select('code', 'display').ilike('display', f'%{search_icd}%').limit(5).execute()
+                        res = supabase.table('master_icd').select('code', 'display').or_(f'code.ilike.%{search_icd}%,display.ilike.%{search_icd}%').limit(10).execute()
                         if res.data:
                             opsi_icd = [f"{r['code']} - {r['display']}" for r in res.data]
                             pilih_icd = st.selectbox("Pilih kode yang sesuai:", opsi_icd)
