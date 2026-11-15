@@ -181,7 +181,75 @@ if "master_ruangan_loaded" not in st.session_state:
             st.session_state.master_ruangan_load_error = str(error)
     st.session_state.master_ruangan_loaded = True
 
-tab_master, tab1, tab2, tab3, tab4 = st.tabs(["⚙️ Master Data", "📤 Upload", "🔁 Mutasi", "🏥 BOR", "📊 Laporan"])
+tab_dash, tab_master, tab1, tab2, tab3, tab4 = st.tabs([
+    "📊 Dashboard", "⚙️ Master Data", "📤 Upload", "🔁 Mutasi", "🏥 BOR", "📊 Laporan"
+])
+
+with tab_dash:
+    st.subheader("Ringkasan Operasional RS")
+    df_dashboard = st.session_state.get("df_clean")
+    if df_dashboard is None or df_dashboard.empty:
+        st.info("Belum ada data. Silakan upload di Tab Upload.")
+    else:
+        if "no_rm" in df_dashboard.columns:
+            df_dashboard_pasien = df_dashboard.drop_duplicates(subset=["no_rm"], keep="last")
+            total_pasien = int(df_dashboard["no_rm"].nunique())
+        else:
+            df_dashboard_pasien = df_dashboard
+            total_pasien = len(df_dashboard)
+        jenis_kelamin = (
+            df_dashboard_pasien["jenis_kelamin"].astype("string").str.strip().str.upper()
+            if "jenis_kelamin" in df_dashboard_pasien.columns
+            else pd.Series(dtype="string")
+        )
+        total_laki = int(jenis_kelamin.eq("L").sum())
+        total_perempuan = int(jenis_kelamin.eq("P").sum())
+        umur = (
+            pd.to_numeric(df_dashboard_pasien["umur_tahun"], errors="coerce")
+            if "umur_tahun" in df_dashboard_pasien.columns
+            else pd.Series(dtype="float64")
+        )
+        rata_rata_umur = umur.mean()
+        umur_label = f"{rata_rata_umur:.1f} tahun" if pd.notna(rata_rata_umur) else "—"
+
+        metrik = st.columns(4)
+        metrik[0].metric("Total Pasien", f"{total_pasien:,}")
+        metrik[1].metric("Laki-laki", f"{total_laki:,}")
+        metrik[2].metric("Perempuan", f"{total_perempuan:,}")
+        metrik[3].metric("Rata-rata Umur", umur_label)
+
+        st.subheader("Distribusi Status Pulang")
+        if "status_pulang" in df_dashboard.columns:
+            status_counts_dashboard = df_dashboard["status_pulang"].value_counts()
+        else:
+            status_counts_dashboard = pd.Series(dtype="int64")
+        if status_counts_dashboard.empty:
+            st.info("Belum ada data status pulang.")
+        else:
+            st.bar_chart(status_counts_dashboard)
+
+        st.subheader("Top 5 Ruangan Terbanyak")
+        if "ruang" in df_dashboard.columns:
+            ruang_counts_dashboard = df_dashboard["ruang"].value_counts().head(5)
+        else:
+            ruang_counts_dashboard = pd.Series(dtype="int64")
+        if ruang_counts_dashboard.empty:
+            st.info("Belum ada data ruangan.")
+        else:
+            st.bar_chart(ruang_counts_dashboard)
+
+        st.subheader("Distribusi Kelompok Umur")
+        kelompok_umur = pd.cut(
+            umur,
+            bins=[0, 6, 18, 60, float("inf")],
+            labels=["0-5", "6-17", "18-59", "60+"],
+            right=False,
+        )
+        distribusi_umur = kelompok_umur.value_counts(sort=False).reindex(
+            ["0-5", "6-17", "18-59", "60+"],
+            fill_value=0,
+        )
+        st.bar_chart(distribusi_umur)
 
 with tab_master:
     init_master_tt()
