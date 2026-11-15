@@ -24,22 +24,55 @@ def cek_kelas_titipan(row, master_kelas):
     return kelas_jaminan != str(kelas_kamar).strip().upper() if kelas_kamar is not None else True
 
 
-def split_jk_umur(val):
-    if pd.isna(val): return None, None
+def _parse_nama_lengkap(val):
+    """Parse nama rawat, optional kode gender, umur, dan satuan dari satu string."""
+    if pd.isna(val):
+        return None, None, None, None
+
     s = str(val).strip()
-    m = re.search(r'\((\d+)\s*(Th|Bl|Hr)?\)', s, re.IGNORECASE)
-    if not m:
-        jk_only = re.fullmatch(r'\s*([LPFM])\s*', s, re.IGNORECASE)
-        return (jk_only.group(1).upper() if jk_only else None), None
-    prefix = s[:m.start()].strip()
-    jk_match = re.fullmatch(r'([LPFM])', prefix, re.IGNORECASE)
-    jk = jk_match.group(1).upper() if jk_match else None
-    angka = int(m.group(1))
-    satuan = (m.group(2) or 'Th').lower()
-    if satuan == 'bl': umur = round(angka / 12, 2)
-    elif satuan == 'hr': umur = round(angka / 365, 2)
-    else: umur = float(angka)
-    return jk, umur
+    jk_only = re.fullmatch(r'([LPMF])', s, re.IGNORECASE)
+    if jk_only:
+        return None, jk_only.group(1).upper(), None, None
+    pattern = re.compile(
+        r'^(?P<nama>.*?)\s*(?:(?:\|\s*|,\s*)'
+        r'(?P<kode>AN|TN|NY|NN|BY)\s*)?'
+        r'\(\s*(?P<umur>\d+)\s*(?P<satuan>Th|Bl|Hr)\s*\)\s*$',
+        re.IGNORECASE,
+    )
+    match = pattern.match(s)
+    if not match:
+        kode_only = re.fullmatch(
+            r'\s*(AN|TN|NY|NN|BY)\s*\(\s*(\d+)\s*(Th|Bl|Hr)\s*\)\s*',
+            s,
+            re.IGNORECASE,
+        )
+        if kode_only:
+            kode = kode_only.group(1).upper()
+            jk = {'AN': 'L', 'TN': 'L', 'NY': 'P', 'NN': 'P', 'BY': None}.get(kode)
+            return None, jk, int(kode_only.group(2)), kode_only.group(3).capitalize()
+        return clean_nama(s), None, None, None
+
+    nama = match.group('nama').strip().rstrip('|, ').strip()
+    kode = (match.group('kode') or '').upper()
+    if not kode and nama.upper() in {'AN', 'TN', 'NY', 'NN', 'BY'}:
+        kode, nama = nama.upper(), ''
+    jk = {'AN': 'L', 'TN': 'L', 'NY': 'P', 'NN': 'P', 'BY': None}.get(kode)
+    if not kode and nama.upper() in {'L', 'P', 'M', 'F'}:
+        jk, nama = nama.upper(), ''
+    return nama or None, jk, int(match.group('umur')), match.group('satuan').capitalize()
+
+
+def split_jk_umur(val):
+    nama, jk, umur, satuan = _parse_nama_lengkap(val)
+    if umur is None:
+        return nama, jk, None
+    if satuan == 'Bl':
+        umur_tahun = round(umur / 12, 2)
+    elif satuan == 'Hr':
+        umur_tahun = round(umur / 365, 2)
+    else:
+        umur_tahun = float(umur)
+    return nama, jk, umur_tahun
 
 
 def kategori_umur(umur):

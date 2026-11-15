@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io
-from modules.loader import get_sheet_names, load_data
+from modules.loader import get_sheet_names, load_sheet_by_name
 from modules.cleaner import clean_nama, clean_kelas, cek_kelas_titipan, split_jk_umur, kategori_umur, parse_kamar
 from modules.tracker import track_perpindahan
 from modules.master_data import init_master_tt, update_master_tt, init_master_kelas, update_master_kelas
@@ -109,7 +109,8 @@ with tab1:
                 selected_sheet = st.selectbox("📑 Pilih Sheet yang mau diolah:", sheet_names)
 
             with st.spinner("Membaca data..."):
-                df, error = load_data(file_bytes, uploaded.name, selected_sheet)
+                uploaded.seek(0)
+                df, error = load_sheet_by_name(uploaded, selected_sheet)
 
             if error:
                 st.error(f"❌ Error saat membaca data: {error}")
@@ -171,15 +172,21 @@ with tab1:
                                 jk_kolom if jk_kolom is not None else jk_nama,
                                 umur_kolom if umur_kolom is not None and not pd.isna(umur_kolom) else umur_nama,
                             )
-                            for (jk_kolom, umur_kolom), (jk_nama, umur_nama)
+                            for (_, jk_kolom, umur_kolom), (_, jk_nama, umur_nama)
                             in zip(jk_umur_kolom, jk_umur_nama)
                         ],
                         index=df.index,
                     )
+                    nama_bersih = pd.Series(
+                        [nama_parse if nama_parse is not None else raw_nama
+                         for (nama_parse, _, _), raw_nama
+                         in zip(jk_umur_nama, nilai_kolom(kolom_nama))],
+                        index=df.index,
+                    ).apply(clean_nama)
                     kamar = nilai_kolom(kolom_kamar).apply(parse_kamar)
                     df_clean = pd.DataFrame({
                         "no_rm": nilai_kolom(kolom_no_rm),
-                        "nama": nilai_kolom(kolom_nama).apply(clean_nama),
+                        "nama": nama_bersih,
                         "jenis_kelamin": jk_umur.apply(lambda hasil: hasil[0]),
                         "umur_tahun": jk_umur.apply(lambda hasil: hasil[1]),
                         "kategori_umur": jk_umur.apply(lambda hasil: kategori_umur(hasil[1])),
