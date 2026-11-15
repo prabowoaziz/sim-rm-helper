@@ -5,6 +5,7 @@ from modules.loader import get_sheet_names, load_data
 from modules.cleaner import clean_nama, split_jk_umur, kategori_umur, parse_kamar
 from modules.tracker import track_perpindahan
 from modules.master_data import init_master_tt, update_master_tt
+from modules.bor_calculator import hitung_bor
 
 st.set_page_config(
     page_title="SIM-RM Helper",
@@ -191,7 +192,36 @@ with tab2:
 
 with tab3:
     st.subheader("🏥 BOR & Indikator")
-    st.write("Fitur dalam pengembangan.")
+    df_clean = st.session_state.get("df_clean")
+    master_tt = st.session_state.get("master_tt")
+    if df_clean is None or df_clean.empty:
+        st.info("Silakan upload dan proses data di Tab Upload terlebih dahulu.")
+    elif not master_tt:
+        st.info("Atur jumlah tempat tidur di Tab Master Data terlebih dahulu.")
+    else:
+        df_long = track_perpindahan(df_clean)
+        df_bor = hitung_bor(df_long, master_tt, periode_hari=30)
+        if df_bor.empty:
+            st.info("Belum ada data BOR yang dapat dihitung untuk ruangan dengan jumlah TT.")
+        else:
+            total_rs = df_bor[df_bor["Ruangan"] == "TOTAL RS"]
+            if not total_rs.empty:
+                total = total_rs.iloc[0]
+                col1, col2, col3, col4 = st.columns(4)
+                col1.metric("BOR", f"{total['BOR (%)']:.2f}%")
+                col2.metric("ALOS", f"{total['ALOS (hari)']:.2f} hari")
+                col3.metric("TOI", f"{total['TOI (hari)']:.2f} hari")
+                col4.metric("BTO", f"{total['BTO (kali)']:.2f} kali")
+
+            st.dataframe(df_bor, use_container_width=True, hide_index=True)
+            excel_buffer = io.BytesIO()
+            df_bor.to_excel(excel_buffer, index=False, engine="openpyxl")
+            st.download_button(
+                "Download Hasil BOR (Excel)",
+                data=excel_buffer.getvalue(),
+                file_name="hasil_bor.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
 
 with tab4:
     st.subheader("📊 Laporan RL & Akreditasi")
