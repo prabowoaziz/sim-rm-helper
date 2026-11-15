@@ -7,7 +7,7 @@ from modules.cleaner import clean_nama, clean_kelas, guess_column_types, guess_j
 from modules.tracker import track_perpindahan
 from modules.master_data import init_master_tt, update_master_tt, init_master_kelas, update_master_kelas
 from modules.bor_calculator import hitung_bor, hitung_bor_kelas, hitung_rata_rata_bor_kelas
-from modules.reporter import hitung_statistik_dan_mortalitas
+from modules.reporter import hitung_statistik_dan_mortalitas, hitung_rl_31, hitung_rl_4a
 
 
 def kategori_ruangan(row):
@@ -189,6 +189,7 @@ with tab1:
                     kolom_no_rm = st.selectbox("Kolom No. RM", pilihan, index=default_index(["no rm", "norm", "no. rm", "rekam medik", "rekam medis"], tebakan_kolom["no_rm"]), key="map_no_rm")
                     kolom_kamar = st.selectbox("Kolom Kamar", pilihan, index=default_index(["kamar", "ruang"], tebakan_kolom["kamar"]), key="map_kamar")
                     kolom_penjamin = st.selectbox("Kolom Penjamin", pilihan, index=default_index(["penjamin", "jaminan", "asuransi"], tebakan_kolom["penjamin"]), key="map_penjamin")
+                    kolom_diagnosa = st.selectbox("Kolom Diagnosa", pilihan, index=default_index(["diagnosa", "diagnosis"]), key="map_diagnosa")
                 with map_col3:
                     kolom_tgl_masuk = st.selectbox("Kolom Tanggal Masuk", pilihan, index=default_index(["tgl masuk", "tanggal masuk", "tgl_masuk", "masuk"], tebakan_kolom["tgl_masuk"]), key="map_tgl_masuk")
                     kolom_tgl_keluar = st.selectbox("Kolom Tanggal Keluar", pilihan, index=default_index(["tgl keluar", "tanggal keluar", "tgl_keluar", "keluar"], tebakan_kolom["tgl_keluar"]), key="map_tgl_keluar")
@@ -265,6 +266,7 @@ with tab1:
                                 "umur_tahun": umur,
                                 "kategori_umur": kategori_umur(umur),
                                 "penjamin": nilai_baris(row, kolom_penjamin),
+                                "diagnosa": nilai_baris(row, kolom_diagnosa),
                                 "kelas_jam": kelas_jam,
                                 "kode_kamar": kode_kamar,
                                 "ruang": ruang,
@@ -277,7 +279,7 @@ with tab1:
 
                         kolom_bersih = [
                             "no_rm", "nama", "jenis_kelamin", "umur_tahun", "kategori_umur",
-                            "penjamin", "kelas_jam", "kode_kamar", "ruang", "kelas",
+                            "penjamin", "diagnosa", "kelas_jam", "kode_kamar", "ruang", "kelas",
                             "tgl_masuk", "tgl_keluar", "status_pulang", "is_titipan",
                         ]
                         df_clean = pd.DataFrame(data_bersih, columns=kolom_bersih)
@@ -423,4 +425,30 @@ with tab4:
             file_name="mortalitas.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             key="download_mortalitas",
+        )
+
+        st.subheader("📋 RL 3.1 — Kegiatan Pelayanan Ranap")
+        rl_31_df = hitung_rl_31(df_long)
+        st.dataframe(rl_31_df, use_container_width=True, hide_index=True)
+        rl_31_buffer = io.BytesIO()
+        rl_31_df.to_excel(rl_31_buffer, index=False, engine="openpyxl")
+        st.download_button(
+            "Download RL 3.1 (Excel)",
+            data=rl_31_buffer.getvalue(),
+            file_name="RL_3_1_kegiatan_pelayanan_ranap.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="download_rl_31",
+        )
+
+        st.subheader("📋 RL 4a — Morbiditas Rawat Inap (Top 10)")
+        rl_4a_df = hitung_rl_4a(df_long)
+        st.dataframe(rl_4a_df, use_container_width=True, hide_index=True)
+        rl_4a_buffer = io.BytesIO()
+        rl_4a_df.to_excel(rl_4a_buffer, index=False, engine="openpyxl")
+        st.download_button(
+            "Download RL 4a (Excel)",
+            data=rl_4a_buffer.getvalue(),
+            file_name="RL_4a_morbiditas_rawat_inap.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="download_rl_4a",
         )
