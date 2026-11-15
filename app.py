@@ -7,6 +7,7 @@ from modules.cleaner import clean_nama, clean_kelas, guess_column_types, guess_j
 from modules.tracker import track_perpindahan
 from modules.master_data import init_master_tt, update_master_tt, init_master_kelas, update_master_kelas
 from modules.bor_calculator import hitung_bor, hitung_bor_kelas, hitung_rata_rata_bor_kelas
+from modules.reporter import hitung_statistik_dan_mortalitas
 
 
 def kategori_ruangan(row):
@@ -393,4 +394,33 @@ with tab3:
 
 with tab4:
     st.subheader("📊 Laporan RL & Akreditasi")
-    st.write("Fitur dalam pengembangan.")
+    df_clean = st.session_state.get("df_clean")
+    if df_clean is None or df_clean.empty:
+        st.info("Silakan upload dan proses data di Tab Upload terlebih dahulu.")
+    else:
+        df_long = track_perpindahan(df_clean)
+        status_counts, mortalitas_df = hitung_statistik_dan_mortalitas(df_long)
+
+        st.subheader("📈 Statistik Pasien")
+        st.dataframe(status_counts, use_container_width=True, hide_index=True)
+        statistik_buffer = io.BytesIO()
+        status_counts.to_excel(statistik_buffer, index=False, engine="openpyxl")
+        st.download_button(
+            "Download Statistik Pasien (Excel)",
+            data=statistik_buffer.getvalue(),
+            file_name="statistik_pasien.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="download_statistik_pasien",
+        )
+
+        st.subheader("🪦 Angka Kematian (Mortalitas)")
+        st.dataframe(mortalitas_df, use_container_width=True, hide_index=True)
+        mortalitas_buffer = io.BytesIO()
+        mortalitas_df.to_excel(mortalitas_buffer, index=False, engine="openpyxl")
+        st.download_button(
+            "Download Mortalitas (Excel)",
+            data=mortalitas_buffer.getvalue(),
+            file_name="mortalitas.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="download_mortalitas",
+        )
