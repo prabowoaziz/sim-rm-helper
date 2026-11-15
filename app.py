@@ -183,15 +183,54 @@ if "master_ruangan_loaded" not in st.session_state:
             st.session_state.master_ruangan_load_error = str(error)
     st.session_state.master_ruangan_loaded = True
 
-tab_dash, tab_master, tab1, tab2, tab3, tab4 = st.tabs([
-    "📊 Dashboard", "⚙️ Master Data", "📤 Upload", "🔁 Mutasi", "🏥 BOR", "📊 Laporan"
-])
+menu = st.sidebar.radio(
+    "Navigasi Menu",
+    [" Dashboard", " Upload Data", " Perpindahan Kamar", " BOR & Indikator", " Laporan RL & Akreditasi", "⚙️ Master Data"],
+)
 
-with tab_dash:
+judul_halaman = {
+    " Dashboard": "Dashboard",
+    " Upload Data": "Unggah Data",
+    " Perpindahan Kamar": "Perpindahan Kamar",
+    " BOR & Indikator": "BOR & Indikator",
+    " Laporan RL & Akreditasi": "Laporan RL & Akreditasi",
+    "⚙️ Master Data": "Master Data",
+}
+st.markdown(
+    f"<h1 style='color: #0f172a;'>{judul_halaman[menu]}</h1>",
+    unsafe_allow_html=True,
+)
+
+if menu == " Dashboard":
+    st.subheader("Unggah Cepat")
+    uploaded_dash = st.file_uploader(
+        "Unggah data SIMRS di sini",
+        type=["xlsx", "xls"],
+        key="uploader_dash",
+    )
+    if uploaded_dash is not None:
+        dash_bytes = uploaded_dash.getvalue()
+        dash_sheet_names = get_sheet_names(dash_bytes, uploaded_dash.name)
+        if not dash_sheet_names:
+            st.error("Gagal membaca berkas. Pastikan formatnya tidak rusak.")
+        elif dash_sheet_names[0].startswith("ERROR:"):
+            st.error(f"Gagal membaca berkas: {dash_sheet_names[0]}")
+        else:
+            dash_sheet = dash_sheet_names[0]
+            dash_df, dash_error = load_sheet_by_name(io.BytesIO(dash_bytes), dash_sheet)
+            if dash_error:
+                st.error(f"Gagal membaca data: {dash_error}")
+            else:
+                st.session_state.df_mentah = dash_df
+                st.session_state.berkas_mentah_bytes = dash_bytes
+                st.session_state.berkas_mentah_nama = uploaded_dash.name
+                st.session_state.berkas_mentah_sheet = dash_sheet
+                st.success("Berkas berhasil dimuat! Silakan atur pemetaan di menu Unggah Data.")
+
     st.subheader("Ringkasan Operasional RS")
     df_dashboard = st.session_state.get("df_clean")
     if df_dashboard is None or df_dashboard.empty:
-        st.info("Belum ada data. Silakan upload di Tab Upload.")
+        st.info("Belum ada data. Silakan unggah melalui menu Unggah Data.")
     else:
         if "no_rm" in df_dashboard.columns:
             df_dashboard_pasien = df_dashboard.drop_duplicates(subset=["no_rm"], keep="last")
@@ -253,7 +292,7 @@ with tab_dash:
         )
         st.bar_chart(distribusi_umur)
 
-with tab_master:
+if menu == "⚙️ Master Data":
     init_master_tt()
     init_master_kelas()
     st.subheader("⚙️ Master Tempat Tidur (TT)")
@@ -321,7 +360,7 @@ with tab_master:
         else:
             st.warning("Master Kelas Kamar diperbarui di sesi ini, tetapi belum tersimpan ke Supabase.")
 
-    st.subheader("🧾 Master ICD-10")
+    st.subheader("🧾 Kamus ICD-10")
     if supabase_client is None:
         st.info("Total kamus ICD-10 di database: tidak tersedia (Supabase belum dikonfigurasi).")
     else:
@@ -337,12 +376,12 @@ with tab_master:
         except Exception as error:
             st.warning(f"Jumlah kamus ICD-10 gagal dimuat: {error}")
 
-    icd_file = st.file_uploader("Upload file ICD-10 (.xlsx)", type=["xlsx"], key="upload_master_icd")
+    icd_file = st.file_uploader("Unggah berkas ICD-10 (.xlsx)", type=["xlsx"], key="upload_master_icd")
     if icd_file is not None:
         icd_bytes = icd_file.getvalue()
         icd_hash = hashlib.sha256(icd_bytes).hexdigest()
         if st.session_state.get("icd_import_hash") == icd_hash:
-            st.caption("File ICD-10 ini sudah diimpor pada sesi ini.")
+            st.caption("Berkas ICD-10 ini sudah diimpor pada sesi ini.")
         elif supabase_client is None:
             st.error("Supabase belum dikonfigurasi. Master ICD-10 tidak dapat diimpor.")
         else:
@@ -354,8 +393,8 @@ with tab_master:
             except Exception as error:
                 st.error(f"Gagal mengimpor ICD-10 ke Supabase: {error}")
 
-with tab1:
-    st.subheader("📤 Upload Data Mentah")
+if menu == " Upload Data":
+    st.subheader("📤 Unggah Data Mentah")
     if st.button("⬇️ Muat Data dari Sesi Terakhir"):
         if supabase_client is None:
             st.error("Supabase belum dikonfigurasi. Data riwayat tidak dapat dimuat.")
@@ -370,23 +409,36 @@ with tab1:
                     st.success("Berhasil memuat data dari database!")
             except Exception as error:
                 st.error(f"Gagal memuat data dari database: {error}")
-    st.info("💡 Silakan upload file Excel/CSV hasil tarikan sistem SIMRS.")
+    st.info("💡 Silakan unggah berkas Excel/CSV hasil tarikan sistem SIMRS.")
 
-    uploaded = st.file_uploader("Pilih file", type=["xlsx", "xls", "csv"], label_visibility="collapsed")
+    uploaded = st.file_uploader("Pilih berkas", type=["xlsx", "xls", "csv"], label_visibility="collapsed")
+    if uploaded is None and st.session_state.get("berkas_mentah_bytes") is not None:
+        uploaded = io.BytesIO(st.session_state.berkas_mentah_bytes)
+        uploaded.name = st.session_state.get("berkas_mentah_nama", "data_simrs.xlsx")
 
     if uploaded:
         file_bytes = uploaded.read()
+        st.session_state.berkas_mentah_bytes = file_bytes
+        st.session_state.berkas_mentah_nama = uploaded.name
         sheet_names = get_sheet_names(file_bytes, uploaded.name)
 
         if not sheet_names:
-            st.error("❌ Gagal membaca file. Pastikan format file tidak corrupt.")
+            st.error("❌ Gagal membaca berkas. Pastikan formatnya tidak rusak.")
         elif sheet_names[0].startswith("ERROR:"):
             st.error(f"❌ Detail Error: {sheet_names[0]}")
         else:
-            selected_sheet = sheet_names[0]
+            selected_sheet = (
+                st.session_state.get("berkas_mentah_sheet")
+                if st.session_state.get("berkas_mentah_sheet") in sheet_names
+                else sheet_names[0]
+            )
             if len(sheet_names) > 1:
                 st.write("---")
-                selected_sheet = st.selectbox("📑 Pilih Sheet yang mau diolah:", sheet_names)
+                selected_sheet = st.selectbox(
+                    "📑 Pilih lembar yang akan diolah:",
+                    sheet_names,
+                    index=sheet_names.index(selected_sheet),
+                )
 
             with st.spinner("Membaca data..."):
                 uploaded.seek(0)
@@ -396,6 +448,7 @@ with tab1:
                 st.error(f"❌ Error saat membaca data: {error}")
             else:
                 st.session_state.df_mentah = df
+                st.session_state.berkas_mentah_sheet = selected_sheet
                 st.success(f"✅ Berhasil membaca **{uploaded.name}** (Sheet: `{selected_sheet}`)")
 
                 st.write("")
@@ -405,10 +458,10 @@ with tab1:
                 col3.metric("Status", "Siap Diproses")
 
                 st.write("")
-                pv1, pv2 = st.tabs(["📋 Preview Data (20 Baris)", "🔍 Daftar Kolom"])
+                pv1, pv2 = st.tabs(["📋 Pratinjau Data (20 Baris)", "🔍 Daftar Kolom"])
 
                 with pv1:
-                    with st.expander("👁️ Lihat Preview Data Mentah (20 Baris)", expanded=False):
+                    with st.expander("👁️ Lihat Pratinjau Data Mentah (20 Baris)", expanded=False):
                         st.dataframe(df.head(20), use_container_width=True)
 
                 with pv2:
@@ -558,18 +611,18 @@ with tab1:
 
                 if st.session_state.get("df_clean") is not None:
                     df_clean = st.session_state.df_clean
-                    with st.expander("✅ Lihat Preview Data Bersih", expanded=False):
+                    with st.expander("✅ Lihat Pratinjau Data Bersih", expanded=False):
                         st.dataframe(df_clean.head(20), use_container_width=True)
                     excel_buffer = io.BytesIO()
                     df_clean.to_excel(excel_buffer, index=False, engine="openpyxl")
                     nama_file_asli = Path(uploaded.name).stem
                     st.download_button(
-                        "Download Semua Data (Excel)",
+                        "Unduh Semua Data (Excel)",
                         data=excel_buffer.getvalue(),
                         file_name=f"Data_Bersih_{nama_file_asli}.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     )
-                    with st.expander("⬇️ Download Per Ruangan"):
+                    with st.expander("⬇️ Unduh Data per Ruangan"):
                         kategori_per_baris = df_clean.apply(kategori_ruangan, axis=1)
                         for kategori in kategori_per_baris.dropna().unique():
                             mask_ruangan = kategori_per_baris == kategori
@@ -579,7 +632,7 @@ with tab1:
                             buffer_ruangan = io.BytesIO()
                             df_ruangan.to_excel(buffer_ruangan, index=False, engine="openpyxl")
                             st.download_button(
-                                f"Download {kategori} ({len(df_ruangan)} baris)",
+                                f"Unduh {kategori} ({len(df_ruangan)} baris)",
                                 data=buffer_ruangan.getvalue(),
                                 file_name=f"Data_Bersih_{kategori.replace(' ', '_')}.xlsx",
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -599,16 +652,16 @@ with tab1:
         df_clean_tersimpan = st.session_state.get("df_clean")
         if df_clean_tersimpan is not None:
             st.info(f"Data bersih tersedia dari riwayat: {st.session_state.get('nama_file_riwayat') or 'upload terakhir'}.")
-            with st.expander("✅ Lihat Preview Data Bersih", expanded=False):
+            with st.expander("✅ Lihat Pratinjau Data Bersih", expanded=False):
                 st.dataframe(df_clean_tersimpan.head(20), use_container_width=True)
         else:
-            st.info("Belum ada file yang di-upload.")
+            st.info("Belum ada berkas yang diunggah.")
 
-with tab2:
-    st.subheader("🔁 Track Perpindahan Kamar")
+if menu == " Perpindahan Kamar":
+    st.subheader("🔁 Perpindahan Kamar")
     df_clean = st.session_state.get("df_clean")
     if df_clean is None or df_clean.empty:
-        st.info("Silakan upload dan proses data di Tab Upload terlebih dahulu.")
+        st.info("Silakan unggah dan proses data di menu Unggah Data terlebih dahulu.")
     else:
         df_long = track_perpindahan(df_clean)
         df_tampilan = df_long.rename(columns={"pindah": "Pindahan"})
@@ -616,20 +669,20 @@ with tab2:
         excel_buffer = io.BytesIO()
         df_tampilan.to_excel(excel_buffer, index=False, engine="openpyxl")
         st.download_button(
-            "Download Hasil Track (Excel)",
+            "Unduh Hasil Perpindahan (Excel)",
             data=excel_buffer.getvalue(),
             file_name="track_perpindahan.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
-with tab3:
+if menu == " BOR & Indikator":
     st.subheader("🏥 BOR & Indikator")
     df_clean = st.session_state.get("df_clean")
     master_tt = st.session_state.get("master_tt")
     if df_clean is None or df_clean.empty:
-        st.info("Silakan upload dan proses data di Tab Upload terlebih dahulu.")
+        st.info("Silakan unggah dan proses data di menu Unggah Data terlebih dahulu.")
     elif not master_tt:
-        st.info("Atur jumlah tempat tidur di Tab Master Data terlebih dahulu.")
+        st.info("Atur jumlah tempat tidur di menu Master Data terlebih dahulu.")
     else:
         df_long = track_perpindahan(df_clean)
         df_bor = hitung_bor(df_long, master_tt, periode_hari=30)
@@ -649,7 +702,7 @@ with tab3:
             excel_buffer = io.BytesIO()
             df_bor.to_excel(excel_buffer, index=False, engine="openpyxl")
             st.download_button(
-                "Download Hasil BOR (Excel)",
+                "Unduh Hasil BOR (Excel)",
                 data=excel_buffer.getvalue(),
                 file_name="hasil_bor.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -669,11 +722,11 @@ with tab3:
                 metrik[4].metric("BOR Total", f"{rata_rata['BOR_Total']:.2f}%")
                 st.dataframe(df_bor_kelas, use_container_width=True, hide_index=True)
 
-with tab4:
+if menu == " Laporan RL & Akreditasi":
     st.subheader("📊 Laporan RL & Akreditasi")
     df_clean = st.session_state.get("df_clean")
     if df_clean is None or df_clean.empty:
-        st.info("Silakan upload dan proses data di Tab Upload terlebih dahulu.")
+        st.info("Silakan unggah dan proses data di menu Unggah Data terlebih dahulu.")
         df_long = pd.DataFrame()
     else:
         df_long = track_perpindahan(df_clean)
@@ -685,7 +738,7 @@ with tab4:
         statistik_buffer = io.BytesIO()
         status_counts.to_excel(statistik_buffer, index=False, engine="openpyxl")
         st.download_button(
-            "Download Statistik Pasien (Excel)",
+            "Unduh Statistik Pasien (Excel)",
             data=statistik_buffer.getvalue(),
             file_name="statistik_pasien.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -697,7 +750,7 @@ with tab4:
         mortalitas_buffer = io.BytesIO()
         mortalitas_df.to_excel(mortalitas_buffer, index=False, engine="openpyxl")
         st.download_button(
-            "Download Mortalitas (Excel)",
+            "Unduh Mortalitas (Excel)",
             data=mortalitas_buffer.getvalue(),
             file_name="mortalitas.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -710,7 +763,7 @@ with tab4:
         rl_31_buffer = io.BytesIO()
         rl_31_df.to_excel(rl_31_buffer, index=False, engine="openpyxl")
         st.download_button(
-            "Download RL 3.1 (Excel)",
+            "Unduh RL 3.1 (Excel)",
             data=rl_31_buffer.getvalue(),
             file_name="RL_3_1_kegiatan_pelayanan_ranap.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -723,7 +776,7 @@ with tab4:
         rl_4a_buffer = io.BytesIO()
         rl_4a_df.to_excel(rl_4a_buffer, index=False, engine="openpyxl")
         st.download_button(
-            "Download RL 4a (Excel)",
+            "Unduh RL 4a (Excel)",
             data=rl_4a_buffer.getvalue(),
             file_name="RL_4a_morbiditas_rawat_inap.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
