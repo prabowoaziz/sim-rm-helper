@@ -166,50 +166,69 @@ with tab1:
                     kolom_kelas = st.selectbox("Kolom Kelas Jaminan (VIP/1/2/3)", pilihan, index=default_index(["kelas jaminan", "kelas_jam", "jaminan", "kelas"]), key="map_kelas_jaminan")
 
                 if st.button("🚀 Proses Data"):
-                    def nilai_kolom(nama_kolom):
-                        if nama_kolom == "— Pilih kolom —":
-                            return pd.Series([None] * len(df), index=df.index)
-                        return df[nama_kolom]
+                    with st.spinner("Membersihkan data..."):
+                        df_temp = st.session_state.df_mentah.copy()
+                        data_bersih = []
+                        kolom_tidak_dipilih = pilihan[0]
 
-                    jk_umur_kolom = nilai_kolom(kolom_jk_umur).apply(split_jk_umur)
-                    jk_umur_nama = nilai_kolom(kolom_nama).apply(split_jk_umur)
-                    jk_umur = pd.Series(
-                        [
-                            (
-                                jk_kolom if jk_kolom is not None else jk_nama,
-                                umur_kolom if umur_kolom is not None and not pd.isna(umur_kolom) else umur_nama,
+                        def nilai_baris(row, nama_kolom):
+                            if nama_kolom == kolom_tidak_dipilih or nama_kolom not in row.index:
+                                return None
+                            nilai = row[nama_kolom]
+                            return None if pd.isna(nilai) else nilai
+
+                        for _, row in df_temp.iterrows():
+                            raw_nama = nilai_baris(row, kolom_nama) or ""
+                            raw_jk_umur = nilai_baris(row, kolom_jk_umur) or ""
+                            jk, umur = split_jk_umur(f"{raw_nama} {raw_jk_umur}".strip())
+                            if jk is None and umur is None:
+                                jk, umur = split_jk_umur(raw_nama)
+
+                            nama_bersih = clean_nama(raw_nama)
+                            raw_kamar = nilai_baris(row, kolom_kamar) or ""
+                            kode_kamar, ruang, kelas_kamar = parse_kamar(raw_kamar)
+                            tgl_masuk = pd.to_datetime(nilai_baris(row, kolom_tgl_masuk), errors="coerce")
+                            raw_tgl_keluar = nilai_baris(row, kolom_tgl_keluar)
+                            tgl_keluar = (
+                                pd.to_datetime(raw_tgl_keluar, errors="coerce")
+                                if raw_tgl_keluar is not None else pd.NaT
                             )
-                            for (_, jk_kolom, umur_kolom), (_, jk_nama, umur_nama)
-                            in zip(jk_umur_kolom, jk_umur_nama)
-                        ],
-                        index=df.index,
-                    )
-                    nama_bersih = pd.Series(
-                        [nama_parse if nama_parse is not None else raw_nama
-                         for (nama_parse, _, _), raw_nama
-                         in zip(jk_umur_nama, nilai_kolom(kolom_nama))],
-                        index=df.index,
-                    ).apply(clean_nama)
-                    kamar = nilai_kolom(kolom_kamar).apply(parse_kamar)
-                    df_clean = pd.DataFrame({
-                        "no_rm": nilai_kolom(kolom_no_rm),
-                        "nama": nama_bersih,
-                        "penjamin": nilai_kolom(kolom_penjamin),
-                        "jenis_kelamin": jk_umur.apply(lambda hasil: hasil[0]),
-                        "umur_tahun": jk_umur.apply(lambda hasil: hasil[1]),
-                        "kategori_umur": jk_umur.apply(lambda hasil: kategori_umur(hasil[1])),
-                        "kelas_jam": nilai_kolom(kolom_kelas).apply(clean_kelas),
-                        "kode_kamar": kamar.apply(lambda hasil: hasil[0]),
-                        "ruang": kamar.apply(lambda hasil: hasil[1]),
-                        "kelas": kamar.apply(lambda hasil: hasil[2]),
-                        "tgl_masuk": pd.to_datetime(nilai_kolom(kolom_tgl_masuk), errors="coerce"),
-                        "tgl_keluar": pd.to_datetime(nilai_kolom(kolom_tgl_keluar), errors="coerce"),
-                    })
-                    master_kelas = st.session_state.get("master_kelas", {})
-                    df_clean["is_titipan"] = df_clean.apply(
-                        lambda row: cek_kelas_titipan(row, master_kelas), axis=1
-                    )
-                    st.session_state.df_clean = df_clean
+                            raw_kelas = nilai_baris(row, kolom_kelas)
+                            kelas_jam = clean_kelas(
+                                raw_kelas if raw_kelas is not None else kelas_kamar
+                            )
+                            no_rm = nilai_baris(row, kolom_no_rm)
+                            no_rm = str(no_rm).strip() if no_rm is not None else None
+
+                            data_bersih.append({
+                                "no_rm": no_rm or None,
+                                "nama": nama_bersih,
+                                "jenis_kelamin": jk,
+                                "umur_tahun": umur,
+                                "kategori_umur": kategori_umur(umur),
+                                "penjamin": nilai_baris(row, kolom_penjamin),
+                                "kelas_jam": kelas_jam,
+                                "kode_kamar": kode_kamar,
+                                "ruang": ruang,
+                                "kelas": kelas_kamar,
+                                "tgl_masuk": tgl_masuk,
+                                "tgl_keluar": tgl_keluar,
+                                "status_pulang": row.get("status_pulang", None),
+                            })
+
+                        kolom_bersih = [
+                            "no_rm", "nama", "jenis_kelamin", "umur_tahun", "kategori_umur",
+                            "penjamin", "kelas_jam", "kode_kamar", "ruang", "kelas",
+                            "tgl_masuk", "tgl_keluar", "status_pulang",
+                        ]
+                        df_clean = pd.DataFrame(data_bersih, columns=kolom_bersih)
+                        df_clean = df_clean.dropna(subset=["nama", "no_rm"])
+                        master_kelas = st.session_state.get("master_kelas", {})
+                        df_clean["is_titipan"] = df_clean.apply(
+                            lambda clean_row: cek_kelas_titipan(clean_row, master_kelas), axis=1
+                        )
+                        st.session_state.df_clean = df_clean
+                    st.success("✅ Data berhasil dibersihkan!")
 
                 if st.session_state.get("df_clean") is not None:
                     df_clean = st.session_state.df_clean
