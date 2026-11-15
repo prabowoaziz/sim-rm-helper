@@ -5,7 +5,14 @@ from pathlib import Path
 from modules.loader import get_sheet_names, load_sheet_by_name
 from modules.cleaner import clean_nama, clean_kelas, guess_column_types, guess_jk_from_nama, split_jk_umur, kategori_umur, parse_kamar
 from modules.tracker import track_perpindahan
-from modules.master_data import init_master_tt, update_master_tt, init_master_kelas, update_master_kelas
+from modules.master_data import (
+    init_master_tt,
+    update_master_tt,
+    init_master_kelas,
+    update_master_kelas,
+    load_master_from_supabase,
+    save_master_to_supabase,
+)
 from modules.bor_calculator import hitung_bor, hitung_bor_kelas, hitung_rata_rata_bor_kelas
 from modules.reporter import hitung_statistik_dan_mortalitas, hitung_rl_31, hitung_rl_4a
 
@@ -38,25 +45,105 @@ st.set_page_config(
 
 st.markdown("""
 <style>
+    /* Font & Background */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
+    }
+    .stApp {
+        background-color: #f8fafc;
+    }
+
+    /* Sembunyikan menu Streamlit bawaan */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+
+    /* Percantik Card Metrics */
     div[data-testid="stMetric"] {
         background-color: #ffffff;
         border: 1px solid #e2e8f0;
-        padding: 15px;
-        border-radius: 10px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        padding: 16px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        border-top: 4px solid #0ea5e9;
     }
-    h1 {
-        color: #0ea5e9;
+    div[data-testid="stMetric"] label {
+        color: #64748b;
+        font-weight: 600;
+    }
+    div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
+        color: #0f172a;
+        font-weight: 700;
+    }
+
+    /* Percantik Tombol */
+    .stButton > button {
+        background-color: #0ea5e9;
+        color: white;
+        border-radius: 8px;
+        border: none;
+        padding: 10px 24px;
+        font-weight: 600;
+        transition: all 0.2s ease;
+        width: 100%;
+    }
+    .stButton > button:hover {
+        background-color: #0284c7;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+    }
+
+    /* Percantik Tab */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background-color: #ffffff;
+        padding: 8px;
+        border-radius: 12px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 8px;
+        padding: 10px 20px;
+        font-weight: 600;
+        color: #64748b;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #e0f2fe !important;
+        color: #0284c7 !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🏥 SIM-RM Helper")
-st.caption("Asisten Laporan Rekam Medis — Upload, Olah, Laporkan")
-st.markdown("---")
+@st.cache_resource
+def get_supabase_client():
+    try:
+        from supabase import create_client
+        config = st.secrets["supabase"]
+        return create_client(config["url"], config["key"])
+    except Exception:
+        return None
+
+
+supabase_client = get_supabase_client()
+
+st.markdown("<h1 style='text-align: center; color: #0f172a;'>🏥 SIM-RM Helper</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #64748b; font-size: 16px;'>Asisten Laporan Rekam Medis — Upload, Olah, Laporkan</p>", unsafe_allow_html=True)
+st.markdown("<br>", unsafe_allow_html=True)
 
 if "df_mentah" not in st.session_state:
     st.session_state.df_mentah = None
+
+init_master_tt()
+init_master_kelas()
+if "master_ruangan_loaded" not in st.session_state:
+    st.session_state.master_ruangan_load_error = None
+    if supabase_client is not None:
+        try:
+            load_master_from_supabase(supabase_client)
+        except Exception as error:
+            st.session_state.master_ruangan_load_error = str(error)
+    st.session_state.master_ruangan_loaded = True
 
 tab_master, tab1, tab2, tab3, tab4 = st.tabs(["⚙️ Master Data", "📤 Upload", "🔁 Mutasi", "🏥 BOR", "📊 Laporan"])
 
@@ -65,6 +152,10 @@ with tab_master:
     init_master_kelas()
     st.subheader("⚙️ Master Tempat Tidur (TT)")
     st.info("Silakan atur jumlah tempat tidur per ruangan.")
+    if st.session_state.get("master_ruangan_load_error"):
+        st.warning(f"Master ruangan gagal dimuat dari Supabase: {st.session_state.master_ruangan_load_error}")
+    elif supabase_client is None:
+        st.warning("Supabase belum dikonfigurasi. Perubahan Master Data hanya tersimpan selama sesi ini.")
 
     master_tt_baru = {}
     for ruang, jumlah in st.session_state.master_tt.items():
@@ -88,7 +179,14 @@ with tab_master:
     if st.button("Simpan Master TT"):
         for ruang, jumlah in master_tt_baru.items():
             update_master_tt(ruang, jumlah)
-        st.success("Master TT berhasil diperbarui!")
+        if supabase_client is not None:
+            try:
+                save_master_to_supabase(supabase_client)
+                st.success("Master TT berhasil disimpan ke Supabase!")
+            except Exception as error:
+                st.error(f"Gagal menyimpan Master TT ke Supabase: {error}")
+        else:
+            st.warning("Master TT diperbarui di sesi ini, tetapi belum tersimpan ke Supabase.")
 
     st.markdown("### 🛏️ Master Kelas Kamar")
     kelas_opsi = ["VIP", "1", "2", "3"]
@@ -108,7 +206,14 @@ with tab_master:
     if st.button("Simpan Master Kelas Kamar"):
         for ruang, kelas in kelas_kamar_baru.items():
             update_master_kelas(ruang, kelas)
-        st.success("Master Kelas Kamar berhasil diperbarui!")
+        if supabase_client is not None:
+            try:
+                save_master_to_supabase(supabase_client)
+                st.success("Master Kelas Kamar berhasil disimpan ke Supabase!")
+            except Exception as error:
+                st.error(f"Gagal menyimpan Master Kelas Kamar ke Supabase: {error}")
+        else:
+            st.warning("Master Kelas Kamar diperbarui di sesi ini, tetapi belum tersimpan ke Supabase.")
 
 with tab1:
     st.subheader("📤 Upload Data Mentah")
