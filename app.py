@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io
+import json
 from pathlib import Path
 from modules.loader import get_sheet_names, load_sheet_by_name
 from modules.cleaner import clean_nama, clean_kelas, guess_column_types, guess_jk_from_nama, split_jk_umur, kategori_umur, parse_kamar
@@ -125,6 +126,41 @@ def get_supabase_client():
         return None
 
 
+def simpan_riwayat_upload(client, df_clean, nama_file):
+    data_json = json.loads(df_clean.to_json(orient="records", date_format="iso"))
+    return client.table("riwayat_upload").insert({
+        "nama_file": nama_file,
+        "data_json": data_json,
+    }).execute()
+
+
+def muat_riwayat_upload_terakhir(client):
+    response = (
+        client.table("riwayat_upload")
+        .select("nama_file, data_json")
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    rows = response.data or []
+    if not rows:
+        return None, None
+
+    row = rows[0]
+    data_json = row.get("data_json") or []
+    if isinstance(data_json, str):
+        data_json = json.loads(data_json)
+    df_clean = pd.read_json(
+        io.StringIO(json.dumps(data_json)),
+        orient="records",
+        dtype=False,
+    )
+    for kolom_tanggal in ("tgl_masuk", "tgl_keluar"):
+        if kolom_tanggal in df_clean.columns:
+            df_clean[kolom_tanggal] = pd.to_datetime(df_clean[kolom_tanggal], errors="coerce")
+    return df_clean, row.get("nama_file")
+
+
 supabase_client = get_supabase_client()
 
 st.markdown("<h1 style='text-align: center; color: #0f172a;'>🏥 SIM-RM Helper</h1>", unsafe_allow_html=True)
@@ -217,6 +253,20 @@ with tab_master:
 
 with tab1:
     st.subheader("📤 Upload Data Mentah")
+    if st.button("⬇️ Muat Data dari Sesi Terakhir"):
+        if supabase_client is None:
+            st.error("Supabase belum dikonfigurasi. Data riwayat tidak dapat dimuat.")
+        else:
+            try:
+                df_terakhir, nama_file_terakhir = muat_riwayat_upload_terakhir(supabase_client)
+                if df_terakhir is None:
+                    st.warning("Belum ada riwayat upload di database.")
+                else:
+                    st.session_state.df_clean = df_terakhir
+                    st.session_state.nama_file_riwayat = nama_file_terakhir
+                    st.success("Berhasil memuat data dari database!")
+            except Exception as error:
+                st.error(f"Gagal memuat data dari database: {error}")
     st.info("💡 Silakan upload file Excel/CSV hasil tarikan sistem SIMRS.")
 
     uploaded = st.file_uploader("Pilih file", type=["xlsx", "xls", "csv"], label_visibility="collapsed")
@@ -392,6 +442,15 @@ with tab1:
                         df_clean = df_clean.dropna(subset=["nama", "no_rm"])
                         df_clean = df_clean.reset_index(drop=True)
                         st.session_state.df_clean = df_clean
+                        st.session_state.nama_file_riwayat = uploaded.name
+                        if supabase_client is not None:
+                            try:
+                                simpan_riwayat_upload(supabase_client, df_clean, uploaded.name)
+                                st.success("Salinan data berhasil disimpan ke riwayat database.")
+                            except Exception as error:
+                                st.warning(f"Data bersih tersedia, tetapi gagal disimpan ke database: {error}")
+                        else:
+                            st.warning("Supabase belum dikonfigurasi; data bersih hanya tersedia di sesi ini.")
                     st.success("✅ Data berhasil dibersihkan!")
 
                 if st.session_state.get("df_clean") is not None:
@@ -434,7 +493,13 @@ with tab1:
                         st.dataframe(kolom_titipan, use_container_width=True, hide_index=True)
     else:
         st.write("")
-        st.info("Belum ada file yang di-upload.")
+        df_clean_tersimpan = st.session_state.get("df_clean")
+        if df_clean_tersimpan is not None:
+            st.info(f"Data bersih tersedia dari riwayat: {st.session_state.get('nama_file_riwayat') or 'upload terakhir'}.")
+            with st.expander("✅ Lihat Preview Data Bersih", expanded=False):
+                st.dataframe(df_clean_tersimpan.head(20), use_container_width=True)
+        else:
+            st.info("Belum ada file yang di-upload.")
 
 with tab2:
     st.subheader("🔁 Track Perpindahan Kamar")
