@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import io
 from modules.loader import get_sheet_names, load_sheet_by_name
-from modules.cleaner import clean_nama, clean_kelas, cek_kelas_titipan, split_jk_umur, kategori_umur, parse_kamar
+from modules.cleaner import clean_nama, clean_kelas, cek_kelas_titipan, guess_column_types, split_jk_umur, kategori_umur, parse_kamar
 from modules.tracker import track_perpindahan
 from modules.master_data import init_master_tt, update_master_tt, init_master_kelas, update_master_kelas
 from modules.bor_calculator import hitung_bor, hitung_bor_kelas, hitung_rata_rata_bor_kelas
@@ -134,12 +134,17 @@ with tab1:
                     kolom_df = {"No": range(1, len(df.columns)+1), "Nama Kolom": list(df.columns)}
                     st.dataframe(kolom_df, use_container_width=True, hide_index=True)
 
+                tebakan_kolom = guess_column_types(df)
+                st.info("✨ Sistem telah menebak kolom secara otomatis. Silakan koreksi jika ada yang salah.")
+
                 st.markdown("---")
                 st.subheader("Pemetaan Kolom")
                 kolom_options = list(df.columns)
                 pilihan = ["— Pilih kolom —"] + kolom_options
 
-                def default_index(kata_kunci):
+                def default_index(kata_kunci, tebakan=None):
+                    if tebakan in kolom_options:
+                        return kolom_options.index(tebakan) + 1
                     for i, nama_kolom in enumerate(kolom_options, start=1):
                         nama = str(nama_kolom).lower()
                         if any(kata in nama for kata in kata_kunci):
@@ -148,14 +153,15 @@ with tab1:
 
                 map_col1, map_col2, map_col3 = st.columns(3)
                 with map_col1:
-                    kolom_nama = st.selectbox("Kolom Nama Pasien", pilihan, index=default_index(["nama"]), key="map_nama")
+                    kolom_nama = st.selectbox("Kolom Nama Pasien", pilihan, index=default_index(["nama"], tebakan_kolom["nama"]), key="map_nama")
                     kolom_jk_umur = st.selectbox("Kolom JK/Umur", pilihan, index=default_index(["jk", "umur", "usia", "kelamin"]), key="map_jk_umur")
                 with map_col2:
-                    kolom_no_rm = st.selectbox("Kolom No. RM", pilihan, index=default_index(["no rm", "norm", "no. rm", "rekam medik", "rekam medis"]), key="map_no_rm")
-                    kolom_kamar = st.selectbox("Kolom Kamar", pilihan, index=default_index(["kamar", "ruang"]), key="map_kamar")
+                    kolom_no_rm = st.selectbox("Kolom No. RM", pilihan, index=default_index(["no rm", "norm", "no. rm", "rekam medik", "rekam medis"], tebakan_kolom["no_rm"]), key="map_no_rm")
+                    kolom_kamar = st.selectbox("Kolom Kamar", pilihan, index=default_index(["kamar", "ruang"], tebakan_kolom["kamar"]), key="map_kamar")
+                    kolom_penjamin = st.selectbox("Kolom Penjamin", pilihan, index=default_index(["penjamin", "jaminan", "asuransi"], tebakan_kolom["penjamin"]), key="map_penjamin")
                 with map_col3:
-                    kolom_tgl_masuk = st.selectbox("Kolom Tanggal Masuk", pilihan, index=default_index(["tgl masuk", "tanggal masuk", "tgl_masuk", "masuk"]), key="map_tgl_masuk")
-                    kolom_tgl_keluar = st.selectbox("Kolom Tanggal Keluar", pilihan, index=default_index(["tgl keluar", "tanggal keluar", "tgl_keluar", "keluar"]), key="map_tgl_keluar")
+                    kolom_tgl_masuk = st.selectbox("Kolom Tanggal Masuk", pilihan, index=default_index(["tgl masuk", "tanggal masuk", "tgl_masuk", "masuk"], tebakan_kolom["tgl_masuk"]), key="map_tgl_masuk")
+                    kolom_tgl_keluar = st.selectbox("Kolom Tanggal Keluar", pilihan, index=default_index(["tgl keluar", "tanggal keluar", "tgl_keluar", "keluar"], tebakan_kolom["tgl_keluar"]), key="map_tgl_keluar")
                     kolom_kelas = st.selectbox("Kolom Kelas Jaminan (VIP/1/2/3)", pilihan, index=default_index(["kelas jaminan", "kelas_jam", "jaminan", "kelas"]), key="map_kelas_jaminan")
 
                 if st.button("🚀 Proses Data"):
@@ -187,6 +193,7 @@ with tab1:
                     df_clean = pd.DataFrame({
                         "no_rm": nilai_kolom(kolom_no_rm),
                         "nama": nama_bersih,
+                        "penjamin": nilai_kolom(kolom_penjamin),
                         "jenis_kelamin": jk_umur.apply(lambda hasil: hasil[0]),
                         "umur_tahun": jk_umur.apply(lambda hasil: hasil[1]),
                         "kategori_umur": jk_umur.apply(lambda hasil: kategori_umur(hasil[1])),
