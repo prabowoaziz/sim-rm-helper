@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import io
+import json
+from supabase import create_client, Client
 
 # Sesuaikan import dengan nama file di folder modules lu
 from modules.loader import get_sheet_names, load_sheet_by_name
@@ -17,6 +19,12 @@ st.set_page_config(
     page_icon="",
     layout="wide"
 )
+
+# Inisialisasi Supabase (Pastikan di Streamlit Secrets sudah ada url & key)
+try:
+    supabase: Client = create_client(st.secrets["supabase"]["url"], st.secrets["supabase"]["key"])
+except Exception as e:
+    st.error(f"Gagal koneksi ke Supabase: {e}")
 
 st.title(" SIM-RM Helper")
 st.caption("Asisten Laporan Rekam Medis — Upload, Olah, Laporkan")
@@ -73,9 +81,49 @@ with tab_master:
         if st.button(" Simpan Master TT"):
             st.success("Master TT berhasil disimpan.")
 
+    # FITUR MASTER ICD-10 (YANG TADI ILANG)
+    st.subheader(" Master ICD-10")
+    with st.container(border=True):
+        st.write("Upload file ICD-10 (.xlsx) dengan kolom CODE, DISPLAY, VERSION.")
+        uploaded_icd = st.file_uploader("Pilih file ICD-10", type=["xlsx"], key="uploader_icd")
+        
+        if uploaded_icd:
+            if st.button(" Import ICD-10 ke Supabase"):
+                with st.spinner("Mengimpor data ICD-10..."):
+                    try:
+                        df_icd = pd.read_excel(uploaded_icd)
+                        # Ambil kolom yang dibutuhkan
+                        df_icd = df_icd[['CODE', 'DISPLAY', 'VERSION']].dropna()
+                        data_icd = df_icd.to_dict('records')
+                        
+                        # Insert batch (per 500 baris agar tidak timeout)
+                        batch_size = 500
+                        for i in range(0, len(data_icd), batch_size):
+                            batch = data_icd[i:i+batch_size]
+                            supabase.table('master_icd').upsert(batch, on_conflict='code').execute()
+                            
+                        st.success(f"✅ Berhasil mengimpor {len(data_icd)} kode ICD-10!")
+                    except Exception as e:
+                        st.error(f"Gagal import: {e}")
+
 # --- TAB: UPLOAD ---
 with tab1:
     st.subheader(" Upload Data Mentah")
+
+    # FITUR MUAT DATA SUPABASE (YANG TADI ILANG)
+    with st.container(border=True):
+        st.write("**Muat Data dari Sesi Terakhir**")
+        if st.button(" Muat Data Terakhir dari Database"):
+            try:
+                res = supabase.table('riwayat_upload').select('*').order('created_at', desc=True).limit(1).execute()
+                if res.data:
+                    latest = res.data[0]
+                    st.session_state.df_clean = pd.read_json(io.StringIO(latest['data_json']))
+                    st.success(f"✅ Berhasil memuat data dari file: {latest['nama_file']}")
+                else:
+                    st.warning("Belum ada riwayat data di database.")
+            except Exception as e:
+                st.error(f"Gagal memuat data: {e}")
     
     with st.container(border=True):
         uploaded = st.file_uploader("Pilih file Excel", type=["xlsx", "xls"])
@@ -134,7 +182,14 @@ with tab1:
                         
                         df_clean = pd.DataFrame(data_bersih).dropna(subset=['nama', 'no_rm'])
                         st.session_state.df_clean = df_clean
-                        st.success(f"✅ Berhasil memproses {len(df_clean)} baris data!")
+                        
+                        # Otomatis simpan ke Supabase (riwayat_upload)
+                        try:
+                            data_json = df_clean.to_json(orient='records', date_format='iso')
+                            supabase.table('riwayat_upload').insert({'nama_file': uploaded.name, 'data_json': data_json}).execute()
+                            st.success(f"✅ Berhasil memproses {len(df_clean)} baris data dan menyimpannya ke database!")
+                        except Exception as e:
+                            st.warning(f"Data diproses, tapi gagal simpan ke database: {e}")
 
     if st.session_state.df_clean is not None:
         with st.container(border=True):
