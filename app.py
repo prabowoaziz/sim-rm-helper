@@ -145,16 +145,10 @@ with tab1:
                             return i
                     return 0
 
-                nama_umur_menyatu = st.checkbox(
-                    "Apakah Nama dan Umur menyatu di kolom Nama?",
-                    value=False,
-                    key="nama_umur_menyatu",
-                )
                 map_col1, map_col2, map_col3 = st.columns(3)
                 with map_col1:
                     kolom_nama = st.selectbox("Kolom Nama Pasien", pilihan, index=default_index(["nama"]), key="map_nama")
-                    if not nama_umur_menyatu:
-                        kolom_jk_umur = st.selectbox("Kolom JK/Umur", pilihan, index=default_index(["jk", "umur", "usia", "kelamin"]), key="map_jk_umur")
+                    kolom_jk_umur = st.selectbox("Kolom JK/Umur", pilihan, index=default_index(["jk", "umur", "usia", "kelamin"]), key="map_jk_umur")
                 with map_col2:
                     kolom_no_rm = st.selectbox("Kolom No. RM", pilihan, index=default_index(["no rm", "norm", "no. rm", "rekam medik", "rekam medis"]), key="map_no_rm")
                     kolom_kamar = st.selectbox("Kolom Kamar", pilihan, index=default_index(["kamar", "ruang"]), key="map_kamar")
@@ -169,10 +163,19 @@ with tab1:
                             return pd.Series([None] * len(df), index=df.index)
                         return df[nama_kolom]
 
-                    if nama_umur_menyatu:
-                        jk_umur = nilai_kolom(kolom_nama).apply(split_jk_umur)
-                    else:
-                        jk_umur = nilai_kolom(kolom_jk_umur).apply(split_jk_umur)
+                    jk_umur_kolom = nilai_kolom(kolom_jk_umur).apply(split_jk_umur)
+                    jk_umur_nama = nilai_kolom(kolom_nama).apply(split_jk_umur)
+                    jk_umur = pd.Series(
+                        [
+                            (
+                                jk_kolom if jk_kolom is not None else jk_nama,
+                                umur_kolom if umur_kolom is not None and not pd.isna(umur_kolom) else umur_nama,
+                            )
+                            for (jk_kolom, umur_kolom), (jk_nama, umur_nama)
+                            in zip(jk_umur_kolom, jk_umur_nama)
+                        ],
+                        index=df.index,
+                    )
                     kamar = nilai_kolom(kolom_kamar).apply(parse_kamar)
                     df_clean = pd.DataFrame({
                         "no_rm": nilai_kolom(kolom_no_rm),
