@@ -8,6 +8,26 @@ from modules.tracker import track_perpindahan
 from modules.master_data import init_master_tt, update_master_tt, init_master_kelas, update_master_kelas
 from modules.bor_calculator import hitung_bor, hitung_bor_kelas, hitung_rata_rata_bor_kelas
 
+
+def kategori_ruangan(row):
+    kode_nilai = row.get("kode_kamar")
+    ruang_nilai = row.get("ruang")
+    kode = "" if pd.isna(kode_nilai) else str(kode_nilai).upper()
+    ruang = "" if pd.isna(ruang_nilai) else str(ruang_nilai).upper()
+    teks = f"{kode} {ruang}"
+    if "PER" in teks:
+        return "PERINA"
+    if "HCU" in teks:
+        return "HCU"
+    if "NIC" in teks:
+        return "NICU"
+    if "PIC" in teks:
+        return "PICU"
+    if "ICU" in teks:
+        return "ICU"
+    return "RAWAT INAP LAINNYA"
+
+
 st.set_page_config(
     page_title="SIM-RM Helper",
     page_icon="🏥",
@@ -272,11 +292,27 @@ with tab1:
                     df_clean.to_excel(excel_buffer, index=False, engine="openpyxl")
                     nama_file_asli = Path(uploaded.name).stem
                     st.download_button(
-                        "Download Excel Bersih",
+                        "Download Semua Data (Excel)",
                         data=excel_buffer.getvalue(),
                         file_name=f"Data_Bersih_{nama_file_asli}.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     )
+                    with st.expander("⬇️ Download Per Ruangan"):
+                        kategori_per_baris = df_clean.apply(kategori_ruangan, axis=1)
+                        for kategori in kategori_per_baris.dropna().unique():
+                            mask_ruangan = kategori_per_baris == kategori
+                            df_ruangan = df_clean.loc[mask_ruangan]
+                            if df_ruangan.empty:
+                                continue
+                            buffer_ruangan = io.BytesIO()
+                            df_ruangan.to_excel(buffer_ruangan, index=False, engine="openpyxl")
+                            st.download_button(
+                                f"Download {kategori} ({len(df_ruangan)} baris)",
+                                data=buffer_ruangan.getvalue(),
+                                file_name=f"Data_Bersih_{kategori.replace(' ', '_')}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                key=f"download_ruangan_{kategori}",
+                            )
                     if "is_titipan" in df_clean.columns and df_clean["is_titipan"].any():
                         st.warning("Ada pasien titipan: kelas jaminan berbeda dari Kelas Kamar fisik.")
                         kolom_titipan = df_clean.loc[
