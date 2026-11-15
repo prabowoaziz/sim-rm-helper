@@ -258,9 +258,17 @@ with tab4:
             with c_right:
                 st.write("**Otomatis (Cari di Kamus)**")
                 search_icd = st.text_input("Cari Diagnosa di Kamus ICD-10", key="search_icd")
-                if search_icd:
+                st.caption("Ketik nama penyakit (misal: Dengue) atau kode ICD-10 (misal: A91).")
+                search_term = search_icd.strip()
+                if search_term:
                     try:
-                        res = supabase.table('master_icd').select('code', 'display').or_(f'code.ilike.%{search_icd}%,display.ilike.%{search_icd}%').limit(10).execute()
+                        res = (
+                            supabase.table('master_icd')
+                            .select('code', 'display')
+                            .or_(f'code.ilike.%{search_term}%,display.ilike.%{search_term}%')
+                            .limit(10)
+                            .execute()
+                        )
                         if res.data:
                             opsi_icd = [f"{r['code']} - {r['display']}" for r in res.data]
                             pilih_icd = st.selectbox("Pilih kode yang sesuai:", opsi_icd)
