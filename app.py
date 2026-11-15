@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import io
 import json
+import hashlib
 from supabase import create_client, Client
 
 from modules.loader import get_sheet_names, load_sheet_by_name
@@ -47,7 +48,28 @@ with tab_dash:
         st.write("**Unggah Cepat**")
         uploaded_dash = st.file_uploader("Upload data di sini", type=["xlsx", "xls"], key="uploader_dash")
         if uploaded_dash:
-            st.info("File diterima. Silakan ke tab Upload untuk memproses.")
+            file_bytes_dash = uploaded_dash.getvalue()
+            dashboard_hash = hashlib.sha256(
+                uploaded_dash.name.encode("utf-8") + b"\0" + file_bytes_dash
+            ).hexdigest()
+            if dashboard_hash != st.session_state.get("dashboard_loaded_hash"):
+                sheet_names_dash = get_sheet_names(file_bytes_dash, uploaded_dash.name)
+                if not sheet_names_dash:
+                    st.error("Gagal membaca file. Pastikan format file tidak rusak.")
+                elif sheet_names_dash[0].startswith("ERROR:"):
+                    st.error(f"Gagal membaca file: {sheet_names_dash[0]}")
+                else:
+                    selected_sheet_dash = sheet_names_dash[0]
+                    df_dash, error_dash = load_sheet_by_name(file_bytes_dash, selected_sheet_dash)
+                    if error_dash:
+                        st.error(f"Gagal membaca file: {error_dash}")
+                    else:
+                        st.session_state.df_mentah = df_dash
+                        st.session_state.nama_file_dash = uploaded_dash.name
+                        st.session_state.file_bytes_dash = file_bytes_dash
+                        st.session_state.sheet_dash = selected_sheet_dash
+                        st.session_state.dashboard_loaded_hash = dashboard_hash
+                        st.success("File berhasil dimuat dari Dashboard. Silakan buka Tab Upload untuk memetakan kolom.")
 
     if st.session_state.df_clean is not None:
         df = st.session_state.df_clean
@@ -117,7 +139,22 @@ with tab1:
                 st.error(f"Gagal memuat data: {e}")
     
     with st.container(border=True):
-        uploaded = st.file_uploader("Pilih file Excel", type=["xlsx", "xls"])
+        if st.session_state.df_mentah is not None and not st.session_state.df_mentah.empty:
+            st.info(
+                f"File aktif saat ini: {st.session_state.get('nama_file_dash', 'Telah dimuat dari Dashboard')}"
+            )
+            if st.button("Batal / Upload File Baru"):
+                st.session_state.df_mentah = None
+                st.session_state.pop("nama_file_dash", None)
+                st.session_state.pop("file_bytes_dash", None)
+                st.session_state.pop("sheet_dash", None)
+                st.rerun()
+            else:
+                uploaded = io.BytesIO(st.session_state.get("file_bytes_dash", b""))
+                uploaded.name = st.session_state.get("nama_file_dash", "data_dashboard.xlsx")
+        else:
+            uploaded = st.file_uploader("Pilih file Excel", type=["xlsx", "xls"])
+
         if uploaded:
             file_bytes = uploaded.read()
             sheet_names = get_sheet_names(file_bytes, uploaded.name)
@@ -131,6 +168,9 @@ with tab1:
                 else:
                     st.success(f"✅ File dimuat: **{uploaded.name}** (Sheet: `{selected_sheet}`)")
                     st.session_state.df_mentah = df
+                    st.session_state.nama_file_dash = uploaded.name
+                    st.session_state.file_bytes_dash = file_bytes
+                    st.session_state.sheet_dash = selected_sheet
                     
                     st.markdown("---")
                     st.subheader("⚙️ Pemetaan Kolom")
