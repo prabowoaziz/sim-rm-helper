@@ -152,10 +152,18 @@ with tab1:
                             return i
                     return 0
 
+                tebakan_jk_umur = next(
+                    (
+                        column for column in kolom_options
+                        if not str(column).casefold().startswith(("_drop_", "unnamed"))
+                        and any(kata in str(column).casefold() for kata in ("jk", "umur", "usia", "kelamin"))
+                    ),
+                    tebakan_kolom["nama"],
+                )
                 map_col1, map_col2, map_col3 = st.columns(3)
                 with map_col1:
                     kolom_nama = st.selectbox("Kolom Nama Pasien", pilihan, index=default_index(["nama"], tebakan_kolom["nama"]), key="map_nama")
-                    kolom_jk_umur = st.selectbox("Kolom JK/Umur", pilihan, index=default_index(["jk", "umur", "usia", "kelamin"]), key="map_jk_umur")
+                    kolom_jk_umur = st.selectbox("Kolom JK/Umur", pilihan, index=default_index(["jk", "umur", "usia", "kelamin"], tebakan_jk_umur), key="map_jk_umur")
                 with map_col2:
                     kolom_no_rm = st.selectbox("Kolom No. RM", pilihan, index=default_index(["no rm", "norm", "no. rm", "rekam medik", "rekam medis"], tebakan_kolom["no_rm"]), key="map_no_rm")
                     kolom_kamar = st.selectbox("Kolom Kamar", pilihan, index=default_index(["kamar", "ruang"], tebakan_kolom["kamar"]), key="map_kamar")
@@ -163,7 +171,7 @@ with tab1:
                 with map_col3:
                     kolom_tgl_masuk = st.selectbox("Kolom Tanggal Masuk", pilihan, index=default_index(["tgl masuk", "tanggal masuk", "tgl_masuk", "masuk"], tebakan_kolom["tgl_masuk"]), key="map_tgl_masuk")
                     kolom_tgl_keluar = st.selectbox("Kolom Tanggal Keluar", pilihan, index=default_index(["tgl keluar", "tanggal keluar", "tgl_keluar", "keluar"], tebakan_kolom["tgl_keluar"]), key="map_tgl_keluar")
-                    kolom_kelas = st.selectbox("Kolom Kelas Jaminan (VIP/1/2/3)", pilihan, index=default_index(["kelas jaminan", "kelas_jam", "jaminan", "kelas"]), key="map_kelas_jaminan")
+                    kolom_kelas = st.selectbox("Kolom Kelas Jaminan (VIP/1/2/3)", pilihan, index=default_index(["kelas_jam", "kelas"], tebakan_kolom["kelas_jaminan"]), key="map_kelas_jaminan")
                     kolom_status = st.selectbox("Kolom Status Pulang (Sembuh/Meninggal)", pilihan, index=default_index(["status pulang", "status_pulang", "status", "pulang"]), key="map_status_pulang")
 
                 if st.button("🚀 Proses Data"):

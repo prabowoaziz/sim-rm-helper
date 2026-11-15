@@ -12,6 +12,7 @@ def guess_column_types(df):
         "tgl_masuk": None,
         "tgl_keluar": None,
         "penjamin": None,
+        "kelas_jaminan": None,
     }
     if df is None or df.empty:
         return guesses
@@ -50,38 +51,61 @@ def guess_column_types(df):
                     return column
         return tied[0]
 
+    candidate_columns = [
+        column for column in df.columns
+        if not str(column).casefold().startswith(("_drop_", "unnamed"))
+    ]
+
     no_rm_scores = [
         (column, ratio(column, lambda v: bool(re.fullmatch(r"\d{5,8}", normalized_number(v)))))
-        for column in df.columns
+        for column in candidate_columns
     ]
     guesses["no_rm"] = choose(
         [(column, score) for column, score in no_rm_scores if score > 0.5],
         (("rm", "rekam", "norm"),),
     )
-    guesses["nama"] = choose(
-        [(column, ratio(column, lambda v: bool(re.search(r"\(\s*\d+\s*(?:Th|Bl|Hr)\b", str(v), re.I))))
-         for column in df.columns],
-        (("nama", "pasien", "lengkap"),),
-    )
+    nama_headers = [
+        column for column in candidate_columns
+        if "nama_lengkap" in str(column).casefold()
+    ]
+    if nama_headers and not values_for(nama_headers[0]).empty:
+        guesses["nama"] = nama_headers[0]
+    else:
+        guesses["nama"] = choose(
+            [(column, ratio(column, lambda v: bool(re.search(r"\(\s*\d+\s*(?:Th|Bl|Hr)\b", str(v), re.I))))
+             for column in candidate_columns],
+            (("nama", "pasien", "lengkap"),),
+        )
     room_words = re.compile(
         r"\b(?:HCU|ICU|NICU|PICU|KEN\w*|ASTER|CEMPAKA|MELATI|MAWAR|ANGGREK|ISOLASI|PERINA)\b",
         re.I,
     )
     guesses["kamar"] = choose(
         [(column, ratio(column, lambda v: "-" in str(v) or bool(room_words.search(str(v)))))
-         for column in df.columns],
+         for column in candidate_columns],
         (("kamar", "ruang", "bed"),),
     )
     payer_words = re.compile(r"BPJS|UMUM|ASURANSI", re.I)
     guesses["penjamin"] = choose(
         [(column, ratio(column, lambda v: bool(payer_words.search(str(v)))))
-         for column in df.columns],
+         for column in candidate_columns],
         (("jaminan", "penjamin", "asuransi"),),
+    )
+
+    def is_class_value(value):
+        s = normalized_number(value).upper()
+        if s in {"1.0", "2.0", "3.0"}:
+            s = s[0]
+        return s in {"1", "2", "3", "VIP"}
+
+    guesses["kelas_jaminan"] = choose(
+        [(column, ratio(column, is_class_value)) for column in candidate_columns],
+        (("kelas_jaminan", "kelas_jam", "kelas"),),
     )
 
     date_scored = [
         (column, ratio(column, has_date))
-        for column in df.columns
+        for column in candidate_columns
     ]
     date_scored = [(column, score) for column, score in date_scored if score > 0]
     masuk_named = [(column, score) for column, score in date_scored
