@@ -225,6 +225,10 @@ with tab1:
                     st.session_state.sheet_dash = selected_sheet
                     
                     st.markdown("---")
+                    # --- FITUR PREVIEW DATA MENTAH ---
+                    with st.expander("️ Lihat Preview Data Mentah (20 Baris Pertama)", expanded=False):
+                        st.dataframe(df.head(20), use_container_width=True)
+                    # ---------------------------------
                     st.subheader("⚙️ Pemetaan Kolom")
                     kolom_options = ["— Pilih kolom —"] + list(df.columns)
                     
