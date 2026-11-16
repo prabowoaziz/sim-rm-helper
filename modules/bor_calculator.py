@@ -1,7 +1,7 @@
 import pandas as pd
 
 
-def hitung_bor(df_long, master_tt, master_dihitung_bor=None, periode_hari=30):
+def hitung_bor(df_long, master_tt, master_dihitung_bor=None, periode_hari=None):
     """Hitung BOR, ALOS, TOI, dan BTO per ruangan serta total rumah sakit."""
     if df_long.empty:
         return pd.DataFrame()
@@ -11,11 +11,32 @@ def hitung_bor(df_long, master_tt, master_dihitung_bor=None, periode_hari=30):
     d = df_long.copy()
     d['tgl_masuk'] = pd.to_datetime(d['tgl_masuk'], errors='coerce')
     d['tgl_keluar'] = pd.to_datetime(d['tgl_keluar'], errors='coerce')
-    tgl_akhir = d['tgl_keluar'].max()
-    if pd.isna(tgl_akhir):
-        tgl_akhir = d['tgl_masuk'].max()
-    d['tgl_keluar_isi'] = d['tgl_keluar'].fillna(tgl_akhir)
+
+    # Tentukan periode: dari tgl_masuk paling awal sampai tgl_keluar paling akhir
+    tgl_awal = d['tgl_masuk'].min()
+    tgl_akhir_data = d['tgl_keluar'].max()
+    if pd.isna(tgl_akhir_data):
+        tgl_akhir_data = d['tgl_masuk'].max()
+
+    # Batasi periode ke bulan berjalan (bulan dari tgl_awal)
+    tgl_akhir_bulan = (tgl_awal + pd.offsets.MonthEnd(0)).normalize()
+    tgl_akhir_periode = min(tgl_akhir_data, tgl_akhir_bulan)
+
+    # Pasien yang keluar di bulan berikutnya: anggap masih dirawat sampai akhir bulan berjalan
+    d['tgl_keluar_isi'] = d['tgl_keluar'].fillna(tgl_akhir_periode)
+    d.loc[d['tgl_keluar_isi'] > tgl_akhir_periode, 'tgl_keluar_isi'] = tgl_akhir_periode
+
+    # Hitung LOS per segmen
     d['los'] = (d['tgl_keluar_isi'] - d['tgl_masuk']).dt.days.add(1).clip(lower=1)
+
+    if periode_hari is None:
+        tgl_awal = d['tgl_masuk'].min()
+        tgl_akhir_data = d['tgl_keluar'].max()
+        if pd.isna(tgl_akhir_data):
+            tgl_akhir_data = d['tgl_masuk'].max()
+        tgl_akhir_bulan = (tgl_awal + pd.offsets.MonthEnd(0)).normalize()
+        tgl_akhir_periode = min(tgl_akhir_data, tgl_akhir_bulan)
+        periode_hari = (tgl_akhir_periode - tgl_awal).days + 1
 
     if 'ruang' in d.columns:
         ruang = d['ruang'].astype('string').str.strip()

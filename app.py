@@ -583,7 +583,7 @@ with tab3:
     else:
         with st.container(border=True):
             df_long = track_perpindahan(st.session_state.df_clean)
-            df_bor = hitung_bor(df_long, st.session_state.master_tt, st.session_state.master_dihitung_bor)
+            df_bor = hitung_bor(df_long, st.session_state.master_tt, st.session_state.master_dihitung_bor, None)
             
             if not df_bor.empty:
                 total = df_bor.iloc[-1]
