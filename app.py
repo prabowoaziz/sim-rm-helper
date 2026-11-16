@@ -99,6 +99,7 @@ if "df_mentah" not in st.session_state: st.session_state.df_mentah = None
 if "df_clean" not in st.session_state: st.session_state.df_clean = None
 if "master_tt" not in st.session_state: st.session_state.master_tt = {"HCU": 6, "ICU": 4, "NICU": 3, "PICU": 2, "Ar Rahmah-1": 10, "Marwah-1": 8, "Kenanga": 10}
 if "master_kelas" not in st.session_state: st.session_state.master_kelas = {}
+if "master_grup_kamar" not in st.session_state: st.session_state.master_grup_kamar = {"RPA": [], "RPM": []}
 
 # ==========================================
 # 3. TABS
@@ -182,6 +183,32 @@ with tab_master:
             st.session_state.master_kelas[nama_ruangan] = pilihan_kelas
         if st.button(" Simpan Master Kelas"):
             st.success("Master Kelas Kamar berhasil disimpan.")
+
+    with st.expander(" Pengelompokan Kamar (RPA/RPM)", expanded=False):
+        st.write("Tentukan kamar mana saja yang masuk ke dalam grup RPA dan RPM.")
+
+        # Ambil semua nama ruangan dari master_tt
+        semua_ruangan = list(st.session_state.master_tt.keys())
+
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Grup RPA**")
+            st.session_state.master_grup_kamar["RPA"] = st.multiselect(
+                "Pilih kamar untuk RPA:",
+                semua_ruangan,
+                default=st.session_state.master_grup_kamar.get("RPA", [])
+            )
+
+        with c2:
+            st.markdown("**Grup RPM**")
+            st.session_state.master_grup_kamar["RPM"] = st.multiselect(
+                "Pilih kamar untuk RPM:",
+                semua_ruangan,
+                default=st.session_state.master_grup_kamar.get("RPM", [])
+            )
+
+        if st.button(" Simpan Pengelompokan Kamar"):
+            st.success("Pengelompokan Kamar (RPA/RPM) berhasil disimpan!")
 
     with st.expander(" Master ICD-10", expanded=False):
         with st.container(border=True):
