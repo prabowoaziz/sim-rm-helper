@@ -363,40 +363,31 @@ with tab1:
             st.download_button("⬇️ Download Data Bersih", data=buf.getvalue(), file_name="Data_Bersih.xlsx")
 
         st.markdown("---")
-        st.markdown("###  Download Laporan Per Kamar")
+        st.markdown("###  Download Laporan Per Kamar (Multi-Sheet)")
+        st.write("Unduh semua data pasien yang dipisah rapi berdasarkan ruangannya ke dalam 1 file Excel.")
 
-        # Logika pengelompokan ruangan
         df_clean = st.session_state.df_clean
         if 'ruang' in df_clean.columns and not df_clean['ruang'].isna().all():
-            kategori_kamar = df_clean['ruang'].dropna().unique()
-
-            # Tampilkan dalam bentuk Grid (2 Kolom)
-            cols = st.columns(2)
-            for i, kamar in enumerate(kategori_kamar):
-                df_kamar = df_clean[df_clean['ruang'] == kamar]
-                jumlah = len(df_kamar)
-
-                # Buat file Excel di memori
-                buf_kamar = io.BytesIO()
-                with pd.ExcelWriter(buf_kamar, engine='openpyxl') as writer:
-                    df_kamar.to_excel(writer, index=False)
-
-                # Tampilan Card Profesional
-                with cols[i % 2]:
-                    st.markdown(f'''
-                    <div class="download-card">
-                        <h4> Kamar: {kamar}</h4>
-                        <p style="color:#64748b; font-size:14px; margin-bottom:10px;">Total: {jumlah} Pasien</p>
-                    ''', unsafe_allow_html=True)
+            if st.button(" Generate Laporan Per Kamar (Excel)"):
+                with st.spinner("Menyiapkan file per kamar..."):
+                    buf_kamar = io.BytesIO()
+                    with pd.ExcelWriter(buf_kamar, engine='openpyxl') as writer:
+                        # Looping setiap ruangan untuk dijadikan sheet
+                        for ruang in df_clean['ruang'].dropna().unique():
+                            df_ruang = df_clean[df_clean['ruang'] == ruang]
+                            # Beri nama sheet maksimal 31 karakter (batas Excel)
+                            nama_sheet = str(ruang)[:31]
+                            df_ruang.to_excel(writer, sheet_name=nama_sheet, index=False)
 
                     st.download_button(
-                        label=f"⬇️ Download Excel ({kamar})",
+                        label="⬇️ Download Semua Kamar (1 File Excel)",
                         data=buf_kamar.getvalue(),
-                        file_name=f"Data_{kamar}.xlsx",
+                        file_name="Data_Pasien_Per_Kamar.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        key=f"dl_{kamar}"
+                        key="dl_per_kamar_multi"
                     )
-                    st.markdown("</div>", unsafe_allow_html=True)
+        else:
+            st.warning("Kolom 'ruang' tidak ditemukan atau kosong.")
 
         st.markdown("---")
         st.markdown("###  Rekap Pasien Harian (Multi-Sheet)")
