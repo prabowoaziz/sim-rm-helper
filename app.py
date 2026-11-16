@@ -132,7 +132,6 @@ if 'master_dihitung_bor' not in st.session_state:
         'Perina Level 1 Room': False,
         'Transit IGD': False,
     }
-if "master_grup_kamar" not in st.session_state: st.session_state.master_grup_kamar = {"RPA": [], "RPM": []}
 
 if 'master_tt_loaded' not in st.session_state:
     try:
@@ -278,32 +277,6 @@ with tab_master:
             st.session_state.master_kelas[nama_ruangan] = pilihan_kelas
         if st.button(" Simpan Master Kelas"):
             st.success("Master Kelas Kamar berhasil disimpan.")
-
-    with st.expander(" Pengelompokan Kamar (RPA/RPM)", expanded=False):
-        st.write("Tentukan kamar mana saja yang masuk ke dalam grup RPA dan RPM.")
-
-        # Ambil semua nama ruangan dari master_tt
-        semua_ruangan = list(st.session_state.master_tt.keys())
-
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown("**Grup RPA**")
-            st.session_state.master_grup_kamar["RPA"] = st.multiselect(
-                "Pilih kamar untuk RPA:",
-                semua_ruangan,
-                default=st.session_state.master_grup_kamar.get("RPA", [])
-            )
-
-        with c2:
-            st.markdown("**Grup RPM**")
-            st.session_state.master_grup_kamar["RPM"] = st.multiselect(
-                "Pilih kamar untuk RPM:",
-                semua_ruangan,
-                default=st.session_state.master_grup_kamar.get("RPM", [])
-            )
-
-        if st.button(" Simpan Pengelompokan Kamar"):
-            st.success("Pengelompokan Kamar (RPA/RPM) berhasil disimpan!")
 
     with st.expander(" Master ICD-10", expanded=False):
         with st.container(border=True):
@@ -622,8 +595,9 @@ with tab3:
                 st.markdown("---")
                 st.dataframe(df_bor, use_container_width=True, hide_index=True)
 
-            st.subheader(" BOR RPA/RPM (Kapasitas 35 TT)")
-            df_harian = hitung_bor_harian(df_long, None)
+            st.subheader(" BOR Harian RS")
+            total_tt_aktif = sum(st.session_state.master_tt.values())
+            df_harian = hitung_bor_harian(df_long, total_tt_aktif)
             rata_rata = hitung_rata_rata_bor(df_harian)
             st.metric("Rata-rata BOR Harian", f"{rata_rata}%")
             st.dataframe(df_harian, use_container_width=True)
