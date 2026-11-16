@@ -160,9 +160,27 @@ with tab_master:
     with st.expander("🛏️ Master Tempat Tidur (TT)", expanded=False):
         with st.container(border=True):
             for ruang, tt in list(st.session_state.master_tt.items()):
-                col1, col2 = st.columns([3, 1])
-                col1.write(f"**{ruang}**")
-                st.session_state.master_tt[ruang] = col2.number_input(f"TT {ruang}", min_value=0, value=tt, label_visibility="collapsed", key=f"tt_{ruang}")
+                c1, c2, c3 = st.columns([3, 1, 1])
+                c1.write(f"**{ruang}**")
+                st.session_state.master_tt[ruang] = c2.number_input(f"TT {ruang}", min_value=0, value=tt, label_visibility="collapsed", key=f"tt_{ruang}")
+
+                # Tombol Hapus
+                if c3.button("️ Hapus", key=f"hapus_{ruang}"):
+                    del st.session_state.master_tt[ruang]
+                    # Hapus juga dari master_kelas jika ada
+                    if ruang in st.session_state.master_kelas:
+                        del st.session_state.master_kelas[ruang]
+                    st.rerun() # Refresh halaman agar baris langsung hilang
+
+            st.markdown("---")
+            c_add1, c_add2 = st.columns([3, 1])
+            new_ruang = c_add1.text_input("Tambah Kamar Baru", placeholder="Nama Kamar Baru...")
+            if c_add2.button("➕ Tambah"):
+                if new_ruang and new_ruang not in st.session_state.master_tt:
+                    st.session_state.master_tt[new_ruang] = 0
+                    st.rerun()
+                elif new_ruang in st.session_state.master_tt:
+                    st.warning("Kamar sudah ada!")
             if st.button(" Simpan Master TT"):
                 st.success("Master TT disimpan.")
 
