@@ -79,6 +79,24 @@ footer {
     background-color: #059669 !important;
     box-shadow: 0 4px 12px rgba(16,185,129,0.3) !important;
 }
+
+/* Card untuk Merge Lintas Bulan */
+.merge-card {
+    background-color: #f8fafc;
+    border: 1px dashed #cbd5e1;
+    border-radius: 10px;
+    padding: 16px;
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+.merge-card h4 {
+    margin-top: 0;
+    color: #0ea5e9;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -283,39 +301,22 @@ with tab1:
                 uploaded = io.BytesIO(st.session_state.get("file_bytes_dash", b""))
                 uploaded.name = st.session_state.get("nama_file_dash", "data_dashboard.xlsx")
         else:
-            uploaded = st.file_uploader("Pilih file Excel", type=["xlsx", "xls"])
+            uploaded = st.file_uploader("Pilih file Excel (File Utama)", type=["xlsx", "xls"])
 
-        st.markdown("---")
-        st.markdown("###  Opsional: Merge Data Bulan Berikutnya")
-        st.info("Upload file Excel bulan berikutnya agar tanggal keluar pasien yang dirawat lintas bulan bisa terisi otomatis.")
-        uploaded_next = st.file_uploader("Upload file Excel bulan berikutnya (Opsional)", type=["xlsx", "xls"], key="upload_next")
-        df_next_raw = None
-        err_next = None
-        map_next_rm = "— Pilih kolom —"
-        map_next_keluar = "— Pilih kolom —"
-        if uploaded_next:
-            next_bytes = uploaded_next.getvalue()
-            next_sheets = get_sheet_names(next_bytes, uploaded_next.name)
-            if next_sheets and not next_sheets[0].startswith("ERROR:"):
-                next_sheet = st.selectbox("Pilih Sheet Bulan Depan:", next_sheets, key="sheet_next")
-                df_next_raw, err_next = load_sheet_by_name(next_bytes, next_sheet)
+        st.markdown("""
+        <div class="merge-card">
+            <h4> Opsional: Merge Data Lintas Bulan</h4>
+            <p style="font-size:13px; color:#64748b; margin-bottom:0;">
+                Upload file bulan lalu dan/atau bulan depan jika ada pasien yang dirawat lintas bulan (misal: masuk September, pulang November).
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
 
-                if not err_next:
-                    st.success("File bulan depan berhasil dibaca!")
-
-                    # HYBRID: Auto-Detect kolom untuk file bulan depan
-                    opts_next = ["— Pilih kolom —"] + list(df_next_raw.columns)
-                    def_next_rm = next((c for c in df_next_raw.columns if 'rm' in str(c).lower() or 'rekam' in str(c).lower()), opts_next[0])
-                    def_next_keluar = next((c for c in df_next_raw.columns if 'keluar' in str(c).lower()), opts_next[0])
-
-                    c_next1, c_next2 = st.columns(2)
-                    with c_next1:
-                        map_next_rm = st.selectbox("Kolom No. RM (Bulan Depan)", opts_next, index=opts_next.index(def_next_rm) if def_next_rm in opts_next else 0)
-                    with c_next2:
-                        map_next_keluar = st.selectbox("Kolom Tanggal Keluar (Bulan Depan)", opts_next, index=opts_next.index(def_next_keluar) if def_next_keluar in opts_next else 0)
-            else:
-                err_next = next_sheets[0] if next_sheets else "Sheet tidak ditemukan."
-                st.error(f"Gagal membaca file bulan berikutnya: {err_next}")
+        c_merge1, c_merge2 = st.columns(2)
+        with c_merge1:
+            uploaded_prev = st.file_uploader(" File Bulan Lalu (Opsional)", type=["xlsx", "xls"], key="upload_prev")
+        with c_merge2:
+            uploaded_next = st.file_uploader(" File Bulan Depan (Opsional)", type=["xlsx", "xls"], key="upload_next")
 
         if uploaded:
             file_bytes = uploaded.read()
@@ -361,14 +362,40 @@ with tab1:
                     
                     if st.button(" Proses Data Pasien"):
                         # --- LOGIKA MERGE LINTAS BULAN ---
-                        dict_tgl_keluar_next = {}
-                        if uploaded_next and not err_next and map_next_rm != "— Pilih kolom —" and map_next_keluar != "— Pilih kolom —":
-                            for _, row_next in df_next_raw.iterrows():
-                                nilai_rm_next = row_next[map_next_rm]
-                                rm_next = str(nilai_rm_next).replace('.0', '').strip() if pd.notna(nilai_rm_next) else "None"
-                                tgl_next = pd.to_datetime(row_next[map_next_keluar], errors='coerce')
-                                if pd.notna(tgl_next) and rm_next not in ("None", "", "nan"):
-                                    dict_tgl_keluar_next[rm_next] = tgl_next
+                        dict_prev = {} # {no_rm: tgl_masuk}
+                        dict_next = {} # {no_rm: tgl_keluar}
+
+                        def ambil_data_tambahan(file_upload, mode="prev"):
+                            if not file_upload:
+                                return {}
+                            try:
+                                f_bytes = file_upload.getvalue()
+                                f_sheets = get_sheet_names(f_bytes, file_upload.name)
+                                if not f_sheets or f_sheets[0].startswith("ERROR:"):
+                                    return {}
+                                f_df, f_err = load_sheet_by_name(f_bytes, f_sheets[0])
+                                if f_err:
+                                    return {}
+
+                                c_rm = next((c for c in f_df.columns if 'rm' in str(c).lower()), None)
+                                c_tgl = next((c for c in f_df.columns if ('masuk' if mode == 'prev' else 'keluar') in str(c).lower()), None)
+
+                                res_dict = {}
+                                if c_rm and c_tgl:
+                                    for _, r in f_df.iterrows():
+                                        rm_value = r[c_rm]
+                                        rm = str(rm_value).replace('.0', '').strip() if pd.notna(rm_value) else ""
+                                        tgl = pd.to_datetime(r[c_tgl], errors='coerce')
+                                        if pd.notna(tgl) and rm not in ["", "None", "nan"]:
+                                            res_dict[rm] = tgl
+                                return res_dict
+                            except Exception:
+                                return {}
+
+                        if uploaded_prev:
+                            dict_prev = ambil_data_tambahan(uploaded_prev, mode="prev")
+                        if uploaded_next:
+                            dict_next = ambil_data_tambahan(uploaded_next, mode="next")
                         # ---------------------------------
 
                         data_bersih = []
@@ -376,16 +403,21 @@ with tab1:
                         for idx, row in df.iterrows():
                             raw_nama = row[map_nama] if map_nama != "— Pilih kolom —" else ""
                             raw_jk = row[map_jk] if map_jk != "— Pilih kolom —" else ""
-                            # Ambil RM dan Tanggal Keluar dari file UTAMA
-                            rm_utama = str(row[map_rm]).replace('.0', '').strip() if map_rm != "— Pilih kolom —" else "None"
-                            no_rm = rm_utama if rm_utama != "None" else None
-                            tgl_keluar_utama = pd.to_datetime(row[map_keluar], errors='coerce') if map_keluar != "— Pilih kolom —" else pd.NaT
+                            # Ambil RM dan Tanggal dari file UTAMA
+                            rm_utama = str(row[map_rm]).replace('.0', '').strip() if map_rm != "— Pilih kolom —" else None
 
-                            # MERGE: Jika tgl keluar kosong di file utama, cari di file bulan depan
-                            if pd.isna(tgl_keluar_utama) and rm_utama in dict_tgl_keluar_next:
-                                tgl_keluar_final = dict_tgl_keluar_next[rm_utama]
+                            tgl_masuk_utama = pd.to_datetime(row[map_masuk], errors='coerce') if map_masuk != "— Pilih kolom —" else pd.NaT
+                            if pd.isna(tgl_masuk_utama) and rm_utama in dict_prev:
+                                tgl_masuk_final = dict_prev[rm_utama]
+                            else:
+                                tgl_masuk_final = tgl_masuk_utama
+
+                            tgl_keluar_utama = pd.to_datetime(row[map_keluar], errors='coerce') if map_keluar != "— Pilih kolom —" else pd.NaT
+                            if pd.isna(tgl_keluar_utama) and rm_utama in dict_next:
+                                tgl_keluar_final = dict_next[rm_utama]
                             else:
                                 tgl_keluar_final = tgl_keluar_utama
+                            no_rm = rm_utama if rm_utama not in (None, "None", "nan") else None
                             
                             nama_bersih = clean_nama(raw_nama)
                             jk, umur = split_jk_umur(f"{raw_nama} {raw_jk}")
@@ -412,7 +444,7 @@ with tab1:
                                 "kode_kamar": kode_kamar,
                                 "ruang": ruang,
                                 "kelas": kelas,
-                                "tgl_masuk": pd.to_datetime(row[map_masuk], errors='coerce') if map_masuk != "— Pilih kolom —" else pd.NaT,
+                                "tgl_masuk": tgl_masuk_final,
                                 "tgl_keluar": tgl_keluar_final,
                                 "status_pulang": row[map_status] if map_status != "— Pilih kolom —" else None,
                                 "kelas_jaminan": kelas_jaminan,
