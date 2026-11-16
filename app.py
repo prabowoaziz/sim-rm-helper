@@ -46,6 +46,39 @@ footer {
 [data-testid="stDataFrame"] {
     font-size: 16px !important;
 }
+
+/* CSS untuk Card & Tombol Download Profesional */
+.download-card {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 15px;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+}
+.download-card h4 {
+    margin-top: 0;
+    color: #1e293b;
+    font-weight: 700;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.stDownloadButton > button {
+    background-color: #10b981 !important;
+    color: white !important;
+    border-radius: 8px !important;
+    border: none !important;
+    padding: 10px 20px !important;
+    font-weight: 600 !important;
+    width: 100% !important;
+    transition: all 0.2s !important;
+}
+.stDownloadButton > button:hover {
+    background-color: #059669 !important;
+    box-shadow: 0 4px 12px rgba(16,185,129,0.3) !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -301,6 +334,42 @@ with tab1:
             with pd.ExcelWriter(buf, engine='openpyxl') as writer:
                 st.session_state.df_clean.to_excel(writer, index=False)
             st.download_button("⬇️ Download Data Bersih", data=buf.getvalue(), file_name="Data_Bersih.xlsx")
+
+        st.markdown("---")
+        st.markdown("###  Download Laporan Per Kamar")
+
+        # Logika pengelompokan ruangan
+        df_clean = st.session_state.df_clean
+        if 'ruang' in df_clean.columns and not df_clean['ruang'].isna().all():
+            kategori_kamar = df_clean['ruang'].dropna().unique()
+
+            # Tampilkan dalam bentuk Grid (2 Kolom)
+            cols = st.columns(2)
+            for i, kamar in enumerate(kategori_kamar):
+                df_kamar = df_clean[df_clean['ruang'] == kamar]
+                jumlah = len(df_kamar)
+
+                # Buat file Excel di memori
+                buf_kamar = io.BytesIO()
+                with pd.ExcelWriter(buf_kamar, engine='openpyxl') as writer:
+                    df_kamar.to_excel(writer, index=False)
+
+                # Tampilan Card Profesional
+                with cols[i % 2]:
+                    st.markdown(f'''
+                    <div class="download-card">
+                        <h4> Kamar: {kamar}</h4>
+                        <p style="color:#64748b; font-size:14px; margin-bottom:10px;">Total: {jumlah} Pasien</p>
+                    ''', unsafe_allow_html=True)
+
+                    st.download_button(
+                        label=f"⬇️ Download Excel ({kamar})",
+                        data=buf_kamar.getvalue(),
+                        file_name=f"Data_{kamar}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key=f"dl_{kamar}"
+                    )
+                    st.markdown("</div>", unsafe_allow_html=True)
 
 # --- TAB: MUTASI ---
 with tab2:
