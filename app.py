@@ -693,6 +693,53 @@ with tab4:
                 st.success(f"✅ {berhasil} pemetaan ICD-10 berhasil disimpan ke database!")
                 st.rerun()
 
+        with st.expander('Jumlah Penyakit Terbanyak', expanded=False):
+            st.write('Rekapitulasi jumlah pasien per diagnosa, diurutkan dari terbanyak ke tersedikit.')
+            df_clean_laporan = st.session_state.df_clean
+            if 'diagnosa' in df_clean_laporan.columns:
+                df_penyakit = df_clean_laporan.copy()
+                df_penyakit['diagnosa'] = df_penyakit['diagnosa'].astype(str).str.strip()
+                df_penyakit = df_penyakit[df_penyakit['diagnosa'].notna()]
+                df_penyakit = df_penyakit[df_penyakit['diagnosa'] != '']
+                df_penyakit = df_penyakit[df_penyakit['diagnosa'].str.lower() != 'nan']
+                df_penyakit = df_penyakit[df_penyakit['diagnosa'].str.lower() != 'tidak ada diagnosa']
+
+                rekap_penyakit = df_penyakit.groupby('diagnosa').agg(
+                    jumlah_pasien=('no_rm', 'nunique'),
+                    jumlah_kunjungan=('no_rm', 'count')
+                ).reset_index()
+                rekap_penyakit = rekap_penyakit.sort_values('jumlah_pasien', ascending=False).reset_index(drop=True)
+                rekap_penyakit.index = rekap_penyakit.index + 1
+                rekap_penyakit.index.name = 'No'
+
+                total_pasien = rekap_penyakit['jumlah_pasien'].sum()
+                rekap_penyakit['persentase'] = (rekap_penyakit['jumlah_pasien'] / total_pasien * 100).round(2).astype(str) + '%'
+
+                c1, c2, c3 = st.columns(3)
+                c1.metric('Total Diagnosa Unik', len(rekap_penyakit))
+                c2.metric('Total Pasien', total_pasien)
+                c3.metric('Diagnosa Terbanyak', rekap_penyakit.iloc[0]['diagnosa'] if len(rekap_penyakit) > 0 else '-')
+
+                top_n = st.slider('Tampilkan Top N', min_value=5, max_value=min(100, len(rekap_penyakit)), value=min(20, len(rekap_penyakit)), key='slider_penyakit')
+                st.dataframe(rekap_penyakit.head(top_n), use_container_width=True)
+
+                st.markdown('**10 Penyakit Terbanyak**')
+                top10 = rekap_penyakit.head(10).set_index('diagnosa')['jumlah_pasien']
+                st.bar_chart(top10)
+
+                buf_penyakit = io.BytesIO()
+                with pd.ExcelWriter(buf_penyakit, engine='openpyxl') as writer:
+                    rekap_penyakit.to_excel(writer, sheet_name='Semua Penyakit')
+                    rekap_penyakit.head(10).to_excel(writer, sheet_name='Top 10')
+                st.download_button(
+                    'Download Rekap Penyakit (Excel)',
+                    data=buf_penyakit.getvalue(),
+                    file_name='Rekap_Penyakit_Terbanyak.xlsx',
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    key='dl_penyakit'
+                )
+            else:
+                st.warning('Kolom diagnosa tidak ditemukan.')
         with st.expander(" Rekap Pasien per DPJP (Dokter)", expanded=False):
             st.write("Rekapitulasi jumlah pasien yang ditangani oleh masing-masing dokter.")
 
