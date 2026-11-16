@@ -398,6 +398,47 @@ with tab1:
                     )
                     st.markdown("</div>", unsafe_allow_html=True)
 
+        st.markdown("---")
+        st.markdown("###  Rekap Pasien Harian (Multi-Sheet)")
+
+        # Ambil bulan dan tahun dari data (asumsi berdasarkan data pertama)
+        df_clean = st.session_state.df_clean
+        if 'tgl_masuk' in df_clean.columns and df_clean['tgl_masuk'].notna().any():
+            # Tentukan bulan & tahun
+            df_clean['tgl_masuk'] = pd.to_datetime(df_clean['tgl_masuk'])
+            bulan_tahun = df_clean['tgl_masuk'].dt.strftime('%B %Y').mode()[0]
+            st.info(f" Sistem mendeteksi data untuk periode: **{bulan_tahun}**")
+
+            if st.button(" Generate Rekap Harian (Excel)"):
+                with st.spinner("Menyiapkan file multi-sheet..."):
+                    buf_harian = io.BytesIO()
+
+                    with pd.ExcelWriter(buf_harian, engine='openpyxl') as writer:
+                        # 1. Sheet Utama (Semua Pasien)
+                        df_urut = df_clean.sort_values(by='tgl_masuk')
+                        df_urut.to_excel(writer, sheet_name="Semua Pasien", index=False)
+
+                        # 2. Sheet Per Tanggal
+                        # Ambil unik tanggal (hanya tanggal, tanpa jam)
+                        unik_tanggal = df_urut['tgl_masuk'].dt.date.dropna().unique()
+
+                        for tgl in sorted(unik_tanggal):
+                            df_tgl = df_urut[df_urut['tgl_masuk'].dt.date == tgl]
+                            # Format nama sheet: "1", "2", "3", dst (sesuai tanggal)
+                            nama_sheet = f"{tgl.day}"
+                            df_tgl.to_excel(writer, sheet_name=nama_sheet, index=False)
+
+                    # Tombol Download
+                    st.download_button(
+                        label="⬇️ Download Rekap Harian (Excel Multi-Sheet)",
+                        data=buf_harian.getvalue(),
+                        file_name=f"Rekap_Pasien_Harian_{bulan_tahun.replace(' ', '_')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key="dl_harian"
+                    )
+        else:
+            st.warning("Kolom tanggal masuk tidak ditemukan atau kosong. Pastikan pemetaan tanggal sudah benar.")
+
 # --- TAB: MUTASI ---
 with tab2:
     st.subheader(" Track Perpindahan Kamar")
