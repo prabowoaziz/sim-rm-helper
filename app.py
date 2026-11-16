@@ -321,6 +321,8 @@ with tab1:
                         map_keluar = st.selectbox("Kolom Tanggal Keluar", kolom_options, index=kolom_options.index('tgl_keluar') if 'tgl_keluar' in kolom_options else 0)
                         map_status = st.selectbox("Kolom Status Pulang", kolom_options, index=kolom_options.index('status_pulang') if 'status_pulang' in kolom_options else 0)
                         map_kelas = st.selectbox("Kolom Kelas Jaminan", kolom_options, index=kolom_options.index('kelas_jaminan') if 'kelas_jaminan' in kolom_options else 0)
+                        default_diag = next((c for c in df.columns if 'diag' in str(c).lower() or 'penyakit' in str(c).lower()), kolom_options[0])
+                        map_diag = st.selectbox("Kolom Diagnosa (Penyakit)", kolom_options, index=kolom_options.index(default_diag) if default_diag in kolom_options else 0)
                         # Deteksi otomatis kolom dokter
                         default_dokter = next((c for c in df.columns if 'dokter' in str(c).lower() or 'dpjp' in str(c).lower()), kolom_options[0])
                         map_dokter = st.selectbox("Kolom Dokter (DPJP)", kolom_options, index=kolom_options.index(default_dokter) if default_dokter in kolom_options else 0)
@@ -360,6 +362,7 @@ with tab1:
                                 "tgl_keluar": pd.to_datetime(row[map_keluar], errors='coerce') if map_keluar != "— Pilih kolom —" else pd.NaT,
                                 "status_pulang": row[map_status] if map_status != "— Pilih kolom —" else None,
                                 "kelas_jaminan": kelas_jaminan,
+                                "diagnosa": str(row[map_diag]).strip() if map_diag != "— Pilih kolom —" else "Tidak Ada Diagnosa",
                                 "dokter": row[map_dokter] if map_dokter != "— Pilih kolom —" else None,
                             })
                         
