@@ -30,6 +30,20 @@ def track_perpindahan(df):
     d['masuk'] = d['urutan'] == 1
     d['pindah'] = d['urutan'] > 1
     d['dipindahkan'] = d['urutan'] < d['total']
+    # Pecah LOS per segmen kamar
+    d['tgl_masuk'] = pd.to_datetime(d['tgl_masuk'], errors='coerce')
+    d['tgl_keluar'] = pd.to_datetime(d['tgl_keluar'], errors='coerce')
+    d = d.sort_values(['no_rm', 'urutan'])
+    d['tgl_masuk_segmen'] = d['tgl_masuk']
+    d['tgl_keluar_segmen'] = d['tgl_keluar']
+    for rm in d['no_rm'].unique():
+        mask = d['no_rm'] == rm
+        idx = d[mask].index.tolist()
+        for i in range(len(idx) - 1):
+            d.loc[idx[i], 'tgl_keluar_segmen'] = d.loc[idx[i+1], 'tgl_masuk']
+    d['tgl_masuk'] = d['tgl_masuk_segmen']
+    d['tgl_keluar'] = d['tgl_keluar_segmen']
+    d = d.drop(columns=['tgl_masuk_segmen', 'tgl_keluar_segmen'])
 
     # Format kamar gabungan
     d['kamar'] = d['kode_kamar'].astype(str) + ' ' + d['ruang'].fillna('').astype(str)

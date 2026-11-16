@@ -483,17 +483,8 @@ with tab1:
                             kode_kamar, ruang, kelas_kamar = parse_kamar(row[map_kamar] if map_kamar != "— Pilih kolom —" else "")
                             raw_kelas = row[map_kelas] if map_kelas != "— Pilih kolom —" else None
                             kelas_dari_master = st.session_state.master_kelas.get(ruang, "Tidak Diketahui")
-                            kelas_excel_kosong = (
-                                raw_kelas is None
-                                or pd.isna(raw_kelas)
-                                or not str(raw_kelas).strip()
-                            )
-                            kelas_jaminan = (
-                                kelas_dari_master
-                                if kelas_excel_kosong
-                                else clean_kelas(raw_kelas)
-                            )
-                            kelas = kelas_dari_master if kelas_excel_kosong else raw_kelas
+                            kelas_jaminan = clean_kelas(raw_kelas)
+                            kelas = kelas_dari_master
                             
                             data_bersih.append({
                                 "no_rm": no_rm,
@@ -631,7 +622,7 @@ with tab3:
                 st.dataframe(df_bor, use_container_width=True, hide_index=True)
 
             st.subheader(" BOR RPA/RPM (Kapasitas 35 TT)")
-            df_harian = hitung_bor_harian(df_long, kapasitas_tt=35)
+            df_harian = hitung_bor_harian(df_long, None)
             rata_rata = hitung_rata_rata_bor(df_harian)
             st.metric("Rata-rata BOR Harian", f"{rata_rata}%")
             st.dataframe(df_harian, use_container_width=True)

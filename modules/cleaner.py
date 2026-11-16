@@ -161,7 +161,7 @@ def clean_kelas(val):
 
 
 def cek_kelas_titipan(row, master_kelas):
-    kelas_jaminan = str(row['kelas_jam']).strip().upper()
+    kelas_jaminan = str(row['kelas_jaminan']).strip().upper()
     kelas_kamar = master_kelas.get(row['ruang'])
     return kelas_jaminan != str(kelas_kamar).strip().upper() if kelas_kamar is not None else True
 

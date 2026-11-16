@@ -11,7 +11,10 @@ def hitung_bor(df_long, master_tt, master_dihitung_bor=None, periode_hari=30):
     d = df_long.copy()
     d['tgl_masuk'] = pd.to_datetime(d['tgl_masuk'], errors='coerce')
     d['tgl_keluar'] = pd.to_datetime(d['tgl_keluar'], errors='coerce')
-    d['tgl_keluar_isi'] = d['tgl_keluar'].fillna(d['tgl_masuk'])
+    tgl_akhir = d['tgl_keluar'].max()
+    if pd.isna(tgl_akhir):
+        tgl_akhir = d['tgl_masuk'].max()
+    d['tgl_keluar_isi'] = d['tgl_keluar'].fillna(tgl_akhir)
     d['los'] = (d['tgl_keluar_isi'] - d['tgl_masuk']).dt.days.add(1).clip(lower=1)
 
     if 'ruang' in d.columns:
@@ -67,8 +70,10 @@ def hitung_bor(df_long, master_tt, master_dihitung_bor=None, periode_hari=30):
     return pd.DataFrame(hasil)
 
 
-def hitung_bor_kelas(df_mutasi, kapasitas_tt=35):
+def hitung_bor_kelas(df_mutasi, kapasitas_tt=None):
     """Hitung okupansi harian dan BOR untuk kelas jaminan VIP, 1, 2, dan 3."""
+    if kapasitas_tt is None:
+        kapasitas_tt = 100
     columns = [
         'tanggal', 'VIP', 'BOR_VIP', 'Kelas_1', 'BOR_1', 'Kelas_2', 'BOR_2',
         'Kelas_3', 'BOR_3', 'Total_Pasien', 'BOR_Total',
@@ -76,7 +81,7 @@ def hitung_bor_kelas(df_mutasi, kapasitas_tt=35):
     if df_mutasi.empty or kapasitas_tt <= 0:
         return pd.DataFrame(columns=columns)
 
-    required = {'tgl_masuk', 'tgl_keluar', 'kelas_jam'}
+    required = {'tgl_masuk', 'tgl_keluar', 'kelas_jaminan'}
     if not required.issubset(df_mutasi.columns):
         return pd.DataFrame(columns=columns)
 
@@ -90,7 +95,7 @@ def hitung_bor_kelas(df_mutasi, kapasitas_tt=35):
     tanggal_awal = d['tgl_masuk'].min()
     tanggal_akhir = max(d['tgl_masuk'].max(), d['tgl_keluar'].max())
     tanggal_semua = pd.date_range(tanggal_awal, tanggal_akhir, freq='D')
-    kelas = d['kelas_jam'].fillna('Tidak Diketahui').astype(str).str.strip().str.upper()
+    kelas = d['kelas_jaminan'].fillna('Tidak Diketahui').astype(str).str.strip().str.upper()
     kelas = kelas.replace({'': 'TIDAK DIKETAHUI', 'KELAS 1': '1', 'KELAS 2': '2', 'KELAS 3': '3'})
     kelas = kelas.where(~kelas.str.startswith('VIP'), 'VIP')
     occupancy = {key: [] for key in ('VIP', '1', '2', '3')}
@@ -133,8 +138,10 @@ def hitung_rata_rata_bor_kelas(df_bor_kelas):
     }
 
 
-def hitung_bor_harian(df_long, kapasitas_tt=35):
+def hitung_bor_harian(df_long, kapasitas_tt=None):
     """Hitung jumlah pasien terisi dan BOR untuk setiap tanggal."""
+    if kapasitas_tt is None:
+        kapasitas_tt = 100
     columns = ['tanggal', 'pasien_terisi', 'bor_persen']
     if df_long.empty or kapasitas_tt <= 0:
         return pd.DataFrame(columns=columns)
