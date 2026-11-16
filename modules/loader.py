@@ -76,6 +76,17 @@ SHEET_GROUP_15COL_PARTIAL_HEADER = {
     "icu": "15col_partial_header",
     "perina masuk": "15col_partial_header",
 }
+SHEET_GROUP_15COL_EXTRA = {
+    'sakinah': '15col_partial_header',
+    'sakinah 1': '15col_partial_header',
+    'sakinah 2': '15col_partial_header',
+    'firdaus': '15col_partial_header',
+    'ar rahmah': '15col_partial_header',
+    'safa': '15col_partial_header',
+    'marwah': '15col_partial_header',
+    'transit igd': '15col_partial_header',
+    'perina level 2': '15col_partial_header',
+}
 
 
 def detect_sheet_group(sheet_name):
@@ -83,6 +94,7 @@ def detect_sheet_group(sheet_name):
     nama = " ".join(str(sheet_name).casefold().split())
     groups = (
         SHEET_GROUP_15COL_PARTIAL_HEADER,
+        SHEET_GROUP_15COL_EXTRA,
         SHEET_GROUP_14COL_PARTIAL_HEADER,
         SHEET_GROUP_15COL_NO_HEADER,
     )
@@ -132,7 +144,6 @@ def load_sheet_by_name(file, sheet_name):
             df[["nama_lengkap", "no_rm"]] = df[["nama_lengkap", "no_rm"]].replace(
                 r"^\s*$", pd.NA, regex=True
             )
-            df = df.dropna(subset=["nama_lengkap", "no_rm"])
         return df, None
     except Exception as e:
         return None, str(e)

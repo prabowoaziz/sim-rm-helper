@@ -502,7 +502,8 @@ with tab1:
                                 "dokter": row[map_dokter] if map_dokter != "— Pilih kolom —" else None,
                             })
                         
-                        df_clean = pd.DataFrame(data_bersih).dropna(subset=['nama', 'no_rm'])
+                        df_clean = pd.DataFrame(data_bersih)
+                        df_clean = df_clean[df_clean['nama'].notna()]  # hanya drop yang nama kosong, no_rm boleh kosong
                         st.session_state.df_clean = df_clean
                         
                         # Otomatis simpan ke Supabase (riwayat_upload)

@@ -14,11 +14,17 @@ def hitung_statistik_dan_mortalitas(df_long):
         total_mati = int(status.str.contains("Meninggal", case=False, na=False).sum())
     else:
         status_counts = pd.DataFrame(columns=["Status Pulang", "Jumlah"])
+        status = pd.Series("", index=df_last.index, dtype="string")
         total_mati = 0
 
     total_keluar = len(df_last)
     gdr = (total_mati / total_keluar * 1000) if total_keluar > 0 else 0
-    ndr = gdr
+    # NDR: hanya kematian >= 48 jam
+    if 'los_hari' in df_last.columns:
+        mati_48jam = df_last[status.str.contains('Meninggal', case=False, na=False) & (df_last['los_hari'] >= 2)]
+        ndr = (len(mati_48jam) / total_keluar * 1000) if total_keluar > 0 else 0
+    else:
+        ndr = gdr
 
     mortalitas_df = pd.DataFrame({
         "Indikator": [
@@ -110,8 +116,8 @@ def hitung_rl_4a(df_long):
         Total=('no_rm', 'nunique')
     ).reset_index()
 
-    # 5. Urutkan berdasarkan Total terbanyak dan ambil 10 teratas
-    rekap = rekap.sort_values(by='Total', ascending=False).head(10)
+    # 5. Urutkan berdasarkan Total terbanyak
+    rekap = rekap.sort_values(by='Total', ascending=False)
 
     # 6. Rapikan format
     rekap = rekap.rename(columns={kolom_diag: 'Diagnosa'})
