@@ -303,6 +303,9 @@ with tab1:
                         map_keluar = st.selectbox("Kolom Tanggal Keluar", kolom_options, index=kolom_options.index('tgl_keluar') if 'tgl_keluar' in kolom_options else 0)
                         map_status = st.selectbox("Kolom Status Pulang", kolom_options, index=kolom_options.index('status_pulang') if 'status_pulang' in kolom_options else 0)
                         map_kelas = st.selectbox("Kolom Kelas Jaminan", kolom_options, index=kolom_options.index('kelas_jaminan') if 'kelas_jaminan' in kolom_options else 0)
+                        # Deteksi otomatis kolom dokter
+                        default_dokter = next((c for c in df.columns if 'dokter' in str(c).lower() or 'dpjp' in str(c).lower()), kolom_options[0])
+                        map_dokter = st.selectbox("Kolom Dokter (DPJP)", kolom_options, index=kolom_options.index(default_dokter) if default_dokter in kolom_options else 0)
                     
                     if st.button(" Proses Data Pasien"):
                         data_bersih = []
@@ -338,7 +341,8 @@ with tab1:
                                 "tgl_masuk": pd.to_datetime(row[map_masuk], errors='coerce') if map_masuk != "— Pilih kolom —" else pd.NaT,
                                 "tgl_keluar": pd.to_datetime(row[map_keluar], errors='coerce') if map_keluar != "— Pilih kolom —" else pd.NaT,
                                 "status_pulang": row[map_status] if map_status != "— Pilih kolom —" else None,
-                                "kelas_jaminan": kelas_jaminan
+                                "kelas_jaminan": kelas_jaminan,
+                                "dokter": row[map_dokter] if map_dokter != "— Pilih kolom —" else None,
                             })
                         
                         df_clean = pd.DataFrame(data_bersih).dropna(subset=['nama', 'no_rm'])
@@ -563,18 +567,13 @@ with tab4:
             st.write("Rekapitulasi jumlah pasien yang ditangani oleh masing-masing dokter.")
 
             df_clean = st.session_state.df_clean
-            # Cari kolom yang berisi nama dokter (biasanya 'dpjp', 'dokter', atau 'dokter_dpjp')
-            kolom_dokter = None
-            for col in df_clean.columns:
-                if 'dokter' in str(col).lower() or 'dpjp' in str(col).lower():
-                    kolom_dokter = col
-                    break
-
-            if kolom_dokter:
-                # Group by dokter dan hitung jumlah pasien unik (No. RM)
-                rekap_dpjp = df_clean.groupby(kolom_dokter)['no_rm'].nunique().reset_index()
+            if 'dokter' in df_clean.columns:
+                rekap_dpjp = df_clean.groupby('dokter')['no_rm'].nunique().reset_index()
                 rekap_dpjp.columns = ['Nama Dokter (DPJP)', 'Jumlah Pasien Unik']
                 rekap_dpjp = rekap_dpjp.sort_values(by='Jumlah Pasien Unik', ascending=False)
+
+                # Hapus baris yang dokternya kosong (NaN)
+                rekap_dpjp = rekap_dpjp.dropna(subset=['Nama Dokter (DPJP)'])
 
                 st.dataframe(rekap_dpjp, use_container_width=True, hide_index=True)
 
@@ -591,4 +590,4 @@ with tab4:
                     key="dl_dpjp"
                 )
             else:
-                st.warning("Kolom Nama Dokter (DPJP) tidak ditemukan di data. Pastikan kolom dokter ada di file Excel mentah.")
+                st.warning("Kolom dokter tidak ditemukan. Pastikan sudah di-map di Tab Upload.")
