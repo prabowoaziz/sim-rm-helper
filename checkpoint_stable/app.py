@@ -160,9 +160,27 @@ with tab_master:
     with st.expander("🛏️ Master Tempat Tidur (TT)", expanded=False):
         with st.container(border=True):
             for ruang, tt in list(st.session_state.master_tt.items()):
-                col1, col2 = st.columns([3, 1])
-                col1.write(f"**{ruang}**")
-                st.session_state.master_tt[ruang] = col2.number_input(f"TT {ruang}", min_value=0, value=tt, label_visibility="collapsed", key=f"tt_{ruang}")
+                c1, c2, c3 = st.columns([3, 1, 1])
+                c1.write(f"**{ruang}**")
+                st.session_state.master_tt[ruang] = c2.number_input(f"TT {ruang}", min_value=0, value=tt, label_visibility="collapsed", key=f"tt_{ruang}")
+
+                # Tombol Hapus
+                if c3.button("️ Hapus", key=f"hapus_{ruang}"):
+                    del st.session_state.master_tt[ruang]
+                    # Hapus juga dari master_kelas jika ada
+                    if ruang in st.session_state.master_kelas:
+                        del st.session_state.master_kelas[ruang]
+                    st.rerun() # Refresh halaman agar baris langsung hilang
+
+            st.markdown("---")
+            c_add1, c_add2 = st.columns([3, 1])
+            new_ruang = c_add1.text_input("Tambah Kamar Baru", placeholder="Nama Kamar Baru...")
+            if c_add2.button("➕ Tambah"):
+                if new_ruang and new_ruang not in st.session_state.master_tt:
+                    st.session_state.master_tt[new_ruang] = 0
+                    st.rerun()
+                elif new_ruang in st.session_state.master_tt:
+                    st.warning("Kamar sudah ada!")
             if st.button(" Simpan Master TT"):
                 st.success("Master TT disimpan.")
 
@@ -267,6 +285,38 @@ with tab1:
         else:
             uploaded = st.file_uploader("Pilih file Excel", type=["xlsx", "xls"])
 
+        st.markdown("---")
+        st.markdown("###  Opsional: Merge Data Bulan Berikutnya")
+        st.info("Upload file Excel bulan berikutnya agar tanggal keluar pasien yang dirawat lintas bulan bisa terisi otomatis.")
+        uploaded_next = st.file_uploader("Upload file Excel bulan berikutnya (Opsional)", type=["xlsx", "xls"], key="upload_next")
+        df_next_raw = None
+        err_next = None
+        map_next_rm = "— Pilih kolom —"
+        map_next_keluar = "— Pilih kolom —"
+        if uploaded_next:
+            next_bytes = uploaded_next.getvalue()
+            next_sheets = get_sheet_names(next_bytes, uploaded_next.name)
+            if next_sheets and not next_sheets[0].startswith("ERROR:"):
+                next_sheet = st.selectbox("Pilih Sheet Bulan Depan:", next_sheets, key="sheet_next")
+                df_next_raw, err_next = load_sheet_by_name(next_bytes, next_sheet)
+
+                if not err_next:
+                    st.success("File bulan depan berhasil dibaca!")
+
+                    # HYBRID: Auto-Detect kolom untuk file bulan depan
+                    opts_next = ["— Pilih kolom —"] + list(df_next_raw.columns)
+                    def_next_rm = next((c for c in df_next_raw.columns if 'rm' in str(c).lower() or 'rekam' in str(c).lower()), opts_next[0])
+                    def_next_keluar = next((c for c in df_next_raw.columns if 'keluar' in str(c).lower()), opts_next[0])
+
+                    c_next1, c_next2 = st.columns(2)
+                    with c_next1:
+                        map_next_rm = st.selectbox("Kolom No. RM (Bulan Depan)", opts_next, index=opts_next.index(def_next_rm) if def_next_rm in opts_next else 0)
+                    with c_next2:
+                        map_next_keluar = st.selectbox("Kolom Tanggal Keluar (Bulan Depan)", opts_next, index=opts_next.index(def_next_keluar) if def_next_keluar in opts_next else 0)
+            else:
+                err_next = next_sheets[0] if next_sheets else "Sheet tidak ditemukan."
+                st.error(f"Gagal membaca file bulan berikutnya: {err_next}")
+
         if uploaded:
             file_bytes = uploaded.read()
             sheet_names = get_sheet_names(file_bytes, uploaded.name)
@@ -303,15 +353,39 @@ with tab1:
                         map_keluar = st.selectbox("Kolom Tanggal Keluar", kolom_options, index=kolom_options.index('tgl_keluar') if 'tgl_keluar' in kolom_options else 0)
                         map_status = st.selectbox("Kolom Status Pulang", kolom_options, index=kolom_options.index('status_pulang') if 'status_pulang' in kolom_options else 0)
                         map_kelas = st.selectbox("Kolom Kelas Jaminan", kolom_options, index=kolom_options.index('kelas_jaminan') if 'kelas_jaminan' in kolom_options else 0)
+                        default_diag = next((c for c in df.columns if 'diag' in str(c).lower() or 'penyakit' in str(c).lower()), kolom_options[0])
+                        map_diag = st.selectbox("Kolom Diagnosa (Penyakit)", kolom_options, index=kolom_options.index(default_diag) if default_diag in kolom_options else 0)
                         # Deteksi otomatis kolom dokter
                         default_dokter = next((c for c in df.columns if 'dokter' in str(c).lower() or 'dpjp' in str(c).lower()), kolom_options[0])
                         map_dokter = st.selectbox("Kolom Dokter (DPJP)", kolom_options, index=kolom_options.index(default_dokter) if default_dokter in kolom_options else 0)
                     
                     if st.button(" Proses Data Pasien"):
+                        # --- LOGIKA MERGE LINTAS BULAN ---
+                        dict_tgl_keluar_next = {}
+                        if uploaded_next and not err_next and map_next_rm != "— Pilih kolom —" and map_next_keluar != "— Pilih kolom —":
+                            for _, row_next in df_next_raw.iterrows():
+                                nilai_rm_next = row_next[map_next_rm]
+                                rm_next = str(nilai_rm_next).replace('.0', '').strip() if pd.notna(nilai_rm_next) else "None"
+                                tgl_next = pd.to_datetime(row_next[map_next_keluar], errors='coerce')
+                                if pd.notna(tgl_next) and rm_next not in ("None", "", "nan"):
+                                    dict_tgl_keluar_next[rm_next] = tgl_next
+                        # ---------------------------------
+
                         data_bersih = []
+
                         for idx, row in df.iterrows():
                             raw_nama = row[map_nama] if map_nama != "— Pilih kolom —" else ""
                             raw_jk = row[map_jk] if map_jk != "— Pilih kolom —" else ""
+                            # Ambil RM dan Tanggal Keluar dari file UTAMA
+                            rm_utama = str(row[map_rm]).replace('.0', '').strip() if map_rm != "— Pilih kolom —" else "None"
+                            no_rm = rm_utama if rm_utama != "None" else None
+                            tgl_keluar_utama = pd.to_datetime(row[map_keluar], errors='coerce') if map_keluar != "— Pilih kolom —" else pd.NaT
+
+                            # MERGE: Jika tgl keluar kosong di file utama, cari di file bulan depan
+                            if pd.isna(tgl_keluar_utama) and rm_utama in dict_tgl_keluar_next:
+                                tgl_keluar_final = dict_tgl_keluar_next[rm_utama]
+                            else:
+                                tgl_keluar_final = tgl_keluar_utama
                             
                             nama_bersih = clean_nama(raw_nama)
                             jk, umur = split_jk_umur(f"{raw_nama} {raw_jk}")
@@ -331,7 +405,7 @@ with tab1:
                             kelas = kelas_dari_master if kelas_excel_kosong else raw_kelas
                             
                             data_bersih.append({
-                                "no_rm": str(row[map_rm]).replace('.0','') if map_rm != "— Pilih kolom —" else None,
+                                "no_rm": no_rm,
                                 "nama": nama_bersih,
                                 "jenis_kelamin": jk,
                                 "umur_tahun": umur,
@@ -339,9 +413,10 @@ with tab1:
                                 "ruang": ruang,
                                 "kelas": kelas,
                                 "tgl_masuk": pd.to_datetime(row[map_masuk], errors='coerce') if map_masuk != "— Pilih kolom —" else pd.NaT,
-                                "tgl_keluar": pd.to_datetime(row[map_keluar], errors='coerce') if map_keluar != "— Pilih kolom —" else pd.NaT,
+                                "tgl_keluar": tgl_keluar_final,
                                 "status_pulang": row[map_status] if map_status != "— Pilih kolom —" else None,
                                 "kelas_jaminan": kelas_jaminan,
+                                "diagnosa": str(row[map_diag]).strip() if map_diag != "— Pilih kolom —" else "Tidak Ada Diagnosa",
                                 "dokter": row[map_dokter] if map_dokter != "— Pilih kolom —" else None,
                             })
                         
@@ -511,57 +586,48 @@ with tab4:
             )
             
         with st.expander(" RL 4a — Morbiditas Rawat Inap & ICD-10", expanded=False):
-            st.write("**Pemetaan Kode ICD-10 (Manual & Otomatis)**")
-            c_left, c_right = st.columns(2)
-            
-            with c_left:
-                st.write("**Manual**")
-                manual_diag = st.text_input("Diagnosa SIMRS (Ketik Manual)", key="manual_diag")
-                manual_kode = st.text_input("Kode ICD-10 (Ketik Manual)", key="manual_kode")
-                if st.button(" Simpan Pemetaan Manual"):
-                    if manual_diag and manual_kode:
-                        try:
-                            supabase.table('kamus_icd').upsert({'diagnosa_simrs': manual_diag, 'kode_icd': manual_kode}, on_conflict='diagnosa_simrs').execute()
-                            st.success("Pemetaan manual berhasil disimpan!")
-                        except Exception as e:
-                            st.error(f"Gagal simpan: {e}")
-                            
-            with c_right:
-                st.write("**Otomatis (Cari di Kamus)**")
-                search_icd = st.text_input("Cari Diagnosa di Kamus ICD-10", key="search_icd")
-                st.caption("Ketik nama penyakit (misal: Dengue) atau kode ICD-10 (misal: A91).")
-                search_term = search_icd.strip()
-                if search_term:
-                    try:
-                        res = (
-                            supabase.table('master_icd')
-                            .select('code', 'display')
-                            .or_(f'code.ilike.%{search_term}%,display.ilike.%{search_term}%')
-                            .limit(10)
-                            .execute()
-                        )
-                        if res.data:
-                            opsi_icd = [f"{r['code']} - {r['display']}" for r in res.data]
-                            pilih_icd = st.selectbox("Pilih kode yang sesuai:", opsi_icd)
-                            if st.button("Gunakan Kode Otomatis Ini"):
-                                st.info(f"Kode {pilih_icd.split(' - ')[0]} siap digunakan (Fitur ini opsional untuk melengkapi tabel).")
-                        else:
-                            st.warning("Diagnosa tidak ditemukan di kamus.")
-                    except Exception as e:
-                        st.error(f"Gagal mencari: {e}")
-
+            # Ambil data RL 4a dari fungsi yang sudah ada
             df_rl4a = hitung_rl_4a(df_long)
-            st.dataframe(df_rl4a, use_container_width=True)
-            buf_rl4a = io.BytesIO()
-            with pd.ExcelWriter(buf_rl4a, engine='openpyxl') as writer:
-                df_rl4a.to_excel(writer, index=False)
-            st.download_button(
-                "⬇️ Download RL 4a (Excel)",
-                data=buf_rl4a.getvalue(),
-                file_name="RL_4a.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="download_rl4a",
+
+            st.markdown("**Pemetaan Kode ICD-10 (Bisa langsung diedit di tabel)**")
+            st.info("Silakan ketik/pilih kode ICD-10 langsung di kolom terakhir. Lalu klik tombol Simpan di bawah.")
+
+            # Pastikan ada kolom Kode ICD di dataframe (jika belum ada, buat kosong)
+            if 'Kode ICD' not in df_rl4a.columns:
+                df_rl4a['Kode ICD'] = ""
+
+            # Tampilkan tabel interaktif
+            edited_df = st.data_editor(
+                df_rl4a,
+                column_config={
+                    "Kode ICD": st.column_config.TextColumn(
+                        "Kode ICD-10",
+                        help="Ketik kode di sini (misal: A91)",
+                        max_chars=10,
+                    )
+                },
+                use_container_width=True,
+                hide_index=True,
+                key="editor_icd"
             )
+
+            # Tombol Simpan ke Database
+            if st.button(" Simpan Pemetaan ICD dari Tabel"):
+                # Ambil data yang berubah (yang ada Kode ICD-nya)
+                df_simpan = edited_df[edited_df['Kode ICD'] != ""]
+
+                berhasil = 0
+                for idx, row in df_simpan.iterrows():
+                    diag = row['Diagnosa']
+                    kode = row['Kode ICD']
+                    try:
+                        supabase.table('kamus_icd').upsert({'diagnosa_simrs': diag, 'kode_icd': kode}, on_conflict='diagnosa_simrs').execute()
+                        berhasil += 1
+                    except Exception:
+                        pass
+
+                st.success(f"✅ {berhasil} pemetaan ICD-10 berhasil disimpan ke database!")
+                st.rerun()
 
         with st.expander(" Rekap Pasien per DPJP (Dokter)", expanded=False):
             st.write("Rekapitulasi jumlah pasien yang ditangani oleh masing-masing dokter.")

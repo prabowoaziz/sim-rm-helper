@@ -75,33 +75,49 @@ def hitung_rl_31(df_long):
 
 
 def hitung_rl_4a(df_long):
-    """Hitung sepuluh besar morbiditas rawat inap menurut diagnosa dan jenis kelamin."""
-    columns = ["No", "Diagnosa", "L", "P", "Total"]
-    df_last = _baris_terakhir_per_pasien(df_long)
-    if df_last.empty:
-        return pd.DataFrame(columns=columns)
+    if df_long.empty:
+        return pd.DataFrame()
 
-    if "diagnosa" in df_last.columns:
-        diagnosis = df_last["diagnosa"].astype("string").str.strip()
-        diagnosis = diagnosis.mask(diagnosis.isna() | diagnosis.eq(""), "Diagnosa Tidak Terisi")
-    else:
-        diagnosis = pd.Series("Diagnosa Tidak Terisi", index=df_last.index, dtype="string")
+    # 1. Cari kolom diagnosa (antisipasi jika namanya beda)
+    kolom_diag = None
+    for col in ['diagnosa', 'diagnosis', 'penyakit', 'dx']:
+        if col in df_long.columns:
+            kolom_diag = col
+            break
 
-    jenis_kelamin = (
-        df_last["jenis_kelamin"].astype("string").str.strip().str.upper()
-        if "jenis_kelamin" in df_last.columns
-        else pd.Series("", index=df_last.index, dtype="string")
-    )
-    data = pd.DataFrame({"Diagnosa": diagnosis, "jenis_kelamin": jenis_kelamin})
-    data = data[data["jenis_kelamin"].isin(["L", "P"])]
-    if data.empty:
-        return pd.DataFrame(columns=columns)
+    if kolom_diag is None:
+        # Jika tidak ada kolom diagnosa sama sekali, return dataframe kosong
+        return pd.DataFrame(columns=['No', 'Diagnosa', 'L', 'P', 'Total'])
 
-    counts = data.groupby(["Diagnosa", "jenis_kelamin"]).size().unstack(fill_value=0)
-    counts = counts.reindex(columns=["L", "P"], fill_value=0)
-    counts["Total"] = counts["L"] + counts["P"]
-    counts = counts.sort_values(["Total", "Diagnosa"], ascending=[False, True]).head(10)
-    result = counts.reset_index()
-    result.insert(0, "No", range(1, len(result) + 1))
-    result.columns.name = None
-    return result[columns]
+    # 2. Ambil baris terakhir per pasien (menghindari hitung dobel jika pindah kamar)
+    df_last = df_long.sort_values('urutan').groupby('no_rm').tail(1).copy()
+
+    # 3. Bersihkan teks diagnosa (isi yang kosong dengan teks tertentu)
+    df_last[kolom_diag] = df_last[kolom_diag].fillna("Tidak Ada Diagnosa").astype(str).str.strip()
+
+    # 4. Group by diagnosa dan hitung L/P
+    # Pastikan kolom jenis_kelamin ada, jika tidak, buat dummy
+    if 'jenis_kelamin' not in df_last.columns:
+        df_last['jenis_kelamin'] = 'Tidak Diketahui'
+
+    # Buat pivot table
+    df_last['L'] = (df_last['jenis_kelamin'] == 'L').astype(int)
+    df_last['P'] = (df_last['jenis_kelamin'] == 'P').astype(int)
+
+    rekap = df_last.groupby(kolom_diag).agg(
+        L=('L', 'sum'),
+        P=('P', 'sum'),
+        Total=('no_rm', 'nunique')
+    ).reset_index()
+
+    # 5. Urutkan berdasarkan Total terbanyak dan ambil 10 teratas
+    rekap = rekap.sort_values(by='Total', ascending=False).head(10)
+
+    # 6. Rapikan format
+    rekap = rekap.rename(columns={kolom_diag: 'Diagnosa'})
+    rekap.insert(0, 'No', range(1, len(rekap) + 1))
+
+    # 7. Tambahkan kolom kosong untuk Kode ICD
+    rekap['Kode ICD-10'] = ""
+
+    return rekap
