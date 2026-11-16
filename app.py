@@ -10,7 +10,6 @@ from modules.cleaner import clean_nama, split_jk_umur, parse_kamar, clean_kelas
 from modules.tracker import track_perpindahan
 from modules.bor_calculator import hitung_bor, hitung_bor_harian, hitung_rata_rata_bor
 from modules.reporter import hitung_statistik_dan_mortalitas, hitung_rl_31, hitung_rl_4a
-from modules.master_tt import load_master_tt, save_master_tt, total_tt_dihitung
 
 # ==========================================
 # 1. KONFIGURASI HALAMAN
@@ -116,9 +115,35 @@ st.markdown("---")
 # ==========================================
 if "df_mentah" not in st.session_state: st.session_state.df_mentah = None
 if "df_clean" not in st.session_state: st.session_state.df_clean = None
-if "master_tt" not in st.session_state: st.session_state.master_tt = {"HCU": 6, "ICU": 4, "NICU": 3, "PICU": 2, "Ar Rahmah-1": 10, "Marwah-1": 8, "Kenanga": 10}
+if 'master_tt' not in st.session_state:
+    st.session_state.master_tt = {
+        'HCU': 3, 'ICU': 3, 'NICU': 3, 'PICU': 1, 'Isolasi-ICU': 3,
+        'Perina Level 2': 5, 'Perina Level 1 Room': 0,
+        'Sakinah-1': 2, 'Sakinah-2': 5,
+        'Firdaus-1': 1, 'Firdaus-2': 1,
+        **{f'Ar Rahmah-{i}': 2 for i in range(1, 16)},
+        'Safa-1': 2, 'Safa-2': 2, 'Safa-3': 3,
+        **{f'Marwah-{i}': 4 for i in range(1, 10)},
+        'Transit IGD': 0,
+    }
 if "master_kelas" not in st.session_state: st.session_state.master_kelas = {}
+if 'master_dihitung_bor' not in st.session_state:
+    st.session_state.master_dihitung_bor = {
+        'Perina Level 1 Room': False,
+        'Transit IGD': False,
+    }
 if "master_grup_kamar" not in st.session_state: st.session_state.master_grup_kamar = {"RPA": [], "RPM": []}
+
+if 'master_tt_loaded' not in st.session_state:
+    try:
+        res = supabase.table('master_tt').select('*').execute()
+        if res.data:
+            st.session_state.master_tt = {r['ruangan']: r['jumlah_tt'] for r in res.data}
+            st.session_state.master_kelas = {r['ruangan']: r.get('kelas', '') for r in res.data}
+            st.session_state.master_dihitung_bor = {r['ruangan']: r.get('dihitung_bor', True) for r in res.data}
+        st.session_state.master_tt_loaded = True
+    except Exception:
+        st.session_state.master_tt_loaded = True
 
 # ==========================================
 # 3. TABS
@@ -176,33 +201,39 @@ with tab_dash:
 
 # --- TAB: MASTER DATA ---
 with tab_master:
-    st.subheader('⚙️ Master Tempat Tidur')
-    st.caption('Edit jumlah TT, tambah ruangan, atau hapus. Data tersimpan otomatis.')
+    with st.expander("🛏️ Master Tempat Tidur (TT)", expanded=False):
+        with st.container(border=True):
+            for ruang, tt in list(st.session_state.master_tt.items()):
+                c1, c2, c3, c4 = st.columns([3, 1, 1, 1])
+                c1.write(f"**{ruang}**")
+                st.session_state.master_tt[ruang] = c2.number_input(
+                    f"TT {ruang}", min_value=0, value=int(tt),
+                    label_visibility="collapsed", key=f"tt_{ruang}"
+                )
+                dihitung_bor = c3.checkbox(
+                    "BOR", value=st.session_state.master_dihitung_bor.get(ruang, True),
+                    key=f"dihitung_bor_{ruang}", help="Sertakan ruangan ini dalam perhitungan BOR"
+                )
+                st.session_state.master_dihitung_bor[ruang] = dihitung_bor
+                if c4.button("🗑️", key=f"hapus_{ruang}", help="Hapus ruangan"):
+                    del st.session_state.master_tt[ruang]
+                    st.session_state.master_kelas.pop(ruang, None)
+                    st.session_state.master_dihitung_bor.pop(ruang, None)
+                    st.rerun()
 
-    df_tt = load_master_tt()
-
-    edited = st.data_editor(
-        df_tt,
-        column_config={
-            'ruangan': st.column_config.TextColumn('Ruangan', width='medium'),
-            'kelas': st.column_config.TextColumn('Kelas', width='small'),
-            'jumlah_tt': st.column_config.NumberColumn('TT', min_value=0, step=1, width='small'),
-            'dihitung_bor': st.column_config.CheckboxColumn('Dihitung BOR?', width='small'),
-        },
-        use_container_width=True,
-        num_rows='dynamic',
-        key='master_tt_editor',
-        hide_index=True,
-    )
-
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        if st.button('💾 Simpan', type='primary', use_container_width=True):
-            save_master_tt(edited)
-            st.success('✅ Tersimpan!')
-            st.rerun()
-
-    st.metric('Total TT (dihitung BOR)', total_tt_dihitung(edited))
+            st.markdown("---")
+            if st.button("💾 Simpan Master TT"):
+                data_tt = [
+                    {
+                        'ruangan': r,
+                        'jumlah_tt': tt,
+                        'dihitung_bor': st.session_state.master_dihitung_bor.get(r, True),
+                        'kelas': st.session_state.master_kelas.get(r, ''),
+                    }
+                    for r, tt in st.session_state.master_tt.items()
+                ]
+                supabase.table('master_tt').upsert(data_tt, on_conflict='ruangan').execute()
+                st.success('Master TT tersimpan di database!')
     with st.expander("️ Master Kelas Kamar", expanded=False):
         opsi_kelas = ["VIP", "1", "2", "3", "Khusus (HCU/ICU/NICU/PICU)"]
         for nama_ruangan in st.session_state.master_tt:
@@ -560,7 +591,7 @@ with tab3:
     else:
         with st.container(border=True):
             df_long = track_perpindahan(st.session_state.df_clean)
-            df_bor = hitung_bor(df_long, st.session_state.master_tt)
+            df_bor = hitung_bor(df_long, st.session_state.master_tt, st.session_state.master_dihitung_bor)
             
             if not df_bor.empty:
                 total = df_bor.iloc[-1]

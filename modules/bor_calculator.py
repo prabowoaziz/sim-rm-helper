@@ -1,11 +1,12 @@
 import pandas as pd
 
 
-def hitung_bor(df_long, master_tt, periode_hari=30):
+def hitung_bor(df_long, master_tt, master_dihitung_bor=None, periode_hari=30):
     """Hitung BOR, ALOS, TOI, dan BTO per ruangan serta total rumah sakit."""
     if df_long.empty:
         return pd.DataFrame()
-
+    if master_dihitung_bor:
+        df_long = df_long[df_long['ruang'].map(lambda r: master_dihitung_bor.get(r, True))]
     # Salin agar kalkulasi tidak mengubah dataframe yang dipakai tab Mutasi.
     d = df_long.copy()
     d['tgl_masuk'] = pd.to_datetime(d['tgl_masuk'], errors='coerce')
