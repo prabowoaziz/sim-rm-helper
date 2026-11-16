@@ -285,6 +285,20 @@ with tab1:
         else:
             uploaded = st.file_uploader("Pilih file Excel", type=["xlsx", "xls"])
 
+        st.markdown("---")
+        st.markdown("###  Opsional: Merge Data Bulan Berikutnya")
+        st.info("Jika ada pasien yang dirawat di akhir bulan ini namun pulang di bulan depan, upload file bulan depannya di sini agar tanggal keluarnya terisi otomatis.")
+        uploaded_next = st.file_uploader("Upload file Excel bulan berikutnya (Opsional)", type=["xlsx", "xls"], key="upload_next")
+        df_next = None
+        if uploaded_next:
+            file_bytes_next = uploaded_next.getvalue()
+            sheet_names_next = get_sheet_names(file_bytes_next, uploaded_next.name)
+            if sheet_names_next:
+                selected_sheet_next = st.selectbox("Pilih Sheet Bulan Berikutnya", sheet_names_next, key="select_sheet_next")
+                df_next, error_next = load_sheet_by_name(file_bytes_next, selected_sheet_next)
+                if error_next:
+                    st.error(f"Gagal membaca file bulan berikutnya: {error_next}")
+
         if uploaded:
             file_bytes = uploaded.read()
             sheet_names = get_sheet_names(file_bytes, uploaded.name)
@@ -329,9 +343,25 @@ with tab1:
                     
                     if st.button(" Proses Data Pasien"):
                         data_bersih = []
+                        dict_next = {}
+                        if uploaded_next and df_next is not None:
+                            if map_rm in df_next.columns and map_keluar in df_next.columns and map_rm != "— Pilih kolom —" and map_keluar != "— Pilih kolom —":
+                                for _, row_next in df_next.iterrows():
+                                    rm_value_next = row_next[map_rm]
+                                    rm_next = str(rm_value_next).replace('.0', '') if pd.notna(rm_value_next) else "None"
+                                    tgl_keluar_next = pd.to_datetime(row_next[map_keluar], errors='coerce')
+                                    if pd.notna(tgl_keluar_next) and rm_next != "None":
+                                        dict_next[rm_next] = tgl_keluar_next
+                            else:
+                                st.warning("Kolom No. RM atau Tanggal Keluar tidak cocok pada file bulan berikutnya.")
+
                         for idx, row in df.iterrows():
                             raw_nama = row[map_nama] if map_nama != "— Pilih kolom —" else ""
                             raw_jk = row[map_jk] if map_jk != "— Pilih kolom —" else ""
+                            no_rm = str(row[map_rm]).replace('.0', '') if map_rm != "— Pilih kolom —" else None
+                            tgl_keluar_final = pd.to_datetime(row[map_keluar], errors='coerce') if map_keluar != "— Pilih kolom —" else pd.NaT
+                            if pd.isna(tgl_keluar_final) and no_rm in dict_next:
+                                tgl_keluar_final = dict_next[no_rm]
                             
                             nama_bersih = clean_nama(raw_nama)
                             jk, umur = split_jk_umur(f"{raw_nama} {raw_jk}")
@@ -351,7 +381,7 @@ with tab1:
                             kelas = kelas_dari_master if kelas_excel_kosong else raw_kelas
                             
                             data_bersih.append({
-                                "no_rm": str(row[map_rm]).replace('.0','') if map_rm != "— Pilih kolom —" else None,
+                                "no_rm": no_rm,
                                 "nama": nama_bersih,
                                 "jenis_kelamin": jk,
                                 "umur_tahun": umur,
@@ -359,7 +389,7 @@ with tab1:
                                 "ruang": ruang,
                                 "kelas": kelas,
                                 "tgl_masuk": pd.to_datetime(row[map_masuk], errors='coerce') if map_masuk != "— Pilih kolom —" else pd.NaT,
-                                "tgl_keluar": pd.to_datetime(row[map_keluar], errors='coerce') if map_keluar != "— Pilih kolom —" else pd.NaT,
+                                "tgl_keluar": tgl_keluar_final,
                                 "status_pulang": row[map_status] if map_status != "— Pilih kolom —" else None,
                                 "kelas_jaminan": kelas_jaminan,
                                 "diagnosa": str(row[map_diag]).strip() if map_diag != "— Pilih kolom —" else "Tidak Ada Diagnosa",
