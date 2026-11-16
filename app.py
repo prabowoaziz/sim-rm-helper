@@ -10,6 +10,7 @@ from modules.cleaner import clean_nama, split_jk_umur, parse_kamar, clean_kelas
 from modules.tracker import track_perpindahan
 from modules.bor_calculator import hitung_bor, hitung_bor_harian, hitung_rata_rata_bor
 from modules.reporter import hitung_statistik_dan_mortalitas, hitung_rl_31, hitung_rl_4a
+from modules.master_tt import load_master_tt, save_master_tt, total_tt_dihitung
 
 # ==========================================
 # 1. KONFIGURASI HALAMAN
@@ -175,33 +176,33 @@ with tab_dash:
 
 # --- TAB: MASTER DATA ---
 with tab_master:
-    with st.expander("🛏️ Master Tempat Tidur (TT)", expanded=False):
-        with st.container(border=True):
-            for ruang, tt in list(st.session_state.master_tt.items()):
-                c1, c2, c3 = st.columns([3, 1, 1])
-                c1.write(f"**{ruang}**")
-                st.session_state.master_tt[ruang] = c2.number_input(f"TT {ruang}", min_value=0, value=tt, label_visibility="collapsed", key=f"tt_{ruang}")
+    st.subheader('⚙️ Master Tempat Tidur')
+    st.caption('Edit jumlah TT, tambah ruangan, atau hapus. Data tersimpan otomatis.')
 
-                # Tombol Hapus
-                if c3.button("️ Hapus", key=f"hapus_{ruang}"):
-                    del st.session_state.master_tt[ruang]
-                    # Hapus juga dari master_kelas jika ada
-                    if ruang in st.session_state.master_kelas:
-                        del st.session_state.master_kelas[ruang]
-                    st.rerun() # Refresh halaman agar baris langsung hilang
+    df_tt = load_master_tt()
 
-            st.markdown("---")
-            c_add1, c_add2 = st.columns([3, 1])
-            new_ruang = c_add1.text_input("Tambah Kamar Baru", placeholder="Nama Kamar Baru...")
-            if c_add2.button("➕ Tambah"):
-                if new_ruang and new_ruang not in st.session_state.master_tt:
-                    st.session_state.master_tt[new_ruang] = 0
-                    st.rerun()
-                elif new_ruang in st.session_state.master_tt:
-                    st.warning("Kamar sudah ada!")
-            if st.button(" Simpan Master TT"):
-                st.success("Master TT disimpan.")
+    edited = st.data_editor(
+        df_tt,
+        column_config={
+            'ruangan': st.column_config.TextColumn('Ruangan', width='medium'),
+            'kelas': st.column_config.TextColumn('Kelas', width='small'),
+            'jumlah_tt': st.column_config.NumberColumn('TT', min_value=0, step=1, width='small'),
+            'dihitung_bor': st.column_config.CheckboxColumn('Dihitung BOR?', width='small'),
+        },
+        use_container_width=True,
+        num_rows='dynamic',
+        key='master_tt_editor',
+        hide_index=True,
+    )
 
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        if st.button('💾 Simpan', type='primary', use_container_width=True):
+            save_master_tt(edited)
+            st.success('✅ Tersimpan!')
+            st.rerun()
+
+    st.metric('Total TT (dihitung BOR)', total_tt_dihitung(edited))
     with st.expander("️ Master Kelas Kamar", expanded=False):
         opsi_kelas = ["VIP", "1", "2", "3", "Khusus (HCU/ICU/NICU/PICU)"]
         for nama_ruangan in st.session_state.master_tt:
