@@ -18,6 +18,15 @@ st.set_page_config(page_title="SIM-RM Helper", page_icon="", layout="wide")
 
 st.markdown("""
 <style>
+/* Hilangkan toolbar/menu bawaan Streamlit di kanan atas */
+header[data-testid="stHeader"],
+div[data-testid="stToolbar"],
+div[data-testid="stDecoration"],
+#MainMenu,
+footer {
+    display: none !important;
+}
+
 /* Memperbesar dan mempertebal teks Tab Navigasi */
 .stTabs [data-baseweb="tab"] {
     font-size: 20px !important;
