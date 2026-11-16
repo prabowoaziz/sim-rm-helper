@@ -8,3 +8,8 @@ __pycache__/
 *.csv
 data/
 .DS_Store
+# Keep the complete stable checkpoint, including copied module caches.
+!checkpoint_stable/
+!checkpoint_stable/modules/
+!checkpoint_stable/modules/__pycache__/
+!checkpoint_stable/modules/__pycache__/*.pyc

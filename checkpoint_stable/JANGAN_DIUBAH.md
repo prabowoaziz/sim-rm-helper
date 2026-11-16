@@ -1,0 +1,1 @@
+Folder ini berisi kode versi stabil. JANGAN sentuh, ubah, atau hapus file di dalam folder ini kecuali diperintahkan oleh user secara eksplisit. Jika ada update fitur di masa depan, kerjakan di folder utama (root), bukan di dalam folder ini.
