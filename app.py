@@ -567,3 +567,37 @@ with tab4:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="download_rl4a",
             )
+
+        with st.expander(" Rekap Pasien per DPJP (Dokter)", expanded=False):
+            st.write("Rekapitulasi jumlah pasien yang ditangani oleh masing-masing dokter.")
+
+            df_clean = st.session_state.df_clean
+            # Cari kolom yang berisi nama dokter (biasanya 'dpjp', 'dokter', atau 'dokter_dpjp')
+            kolom_dokter = None
+            for col in df_clean.columns:
+                if 'dokter' in str(col).lower() or 'dpjp' in str(col).lower():
+                    kolom_dokter = col
+                    break
+
+            if kolom_dokter:
+                # Group by dokter dan hitung jumlah pasien unik (No. RM)
+                rekap_dpjp = df_clean.groupby(kolom_dokter)['no_rm'].nunique().reset_index()
+                rekap_dpjp.columns = ['Nama Dokter (DPJP)', 'Jumlah Pasien Unik']
+                rekap_dpjp = rekap_dpjp.sort_values(by='Jumlah Pasien Unik', ascending=False)
+
+                st.dataframe(rekap_dpjp, use_container_width=True, hide_index=True)
+
+                # Tombol Download
+                buf_dpjp = io.BytesIO()
+                with pd.ExcelWriter(buf_dpjp, engine='openpyxl') as writer:
+                    rekap_dpjp.to_excel(writer, index=False)
+
+                st.download_button(
+                    label="⬇️ Download Rekap DPJP (Excel)",
+                    data=buf_dpjp.getvalue(),
+                    file_name="Rekap_Pasien_DPJP.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="dl_dpjp"
+                )
+            else:
+                st.warning("Kolom Nama Dokter (DPJP) tidak ditemukan di data. Pastikan kolom dokter ada di file Excel mentah.")
