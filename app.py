@@ -511,57 +511,48 @@ with tab4:
             )
             
         with st.expander(" RL 4a — Morbiditas Rawat Inap & ICD-10", expanded=False):
-            st.write("**Pemetaan Kode ICD-10 (Manual & Otomatis)**")
-            c_left, c_right = st.columns(2)
-            
-            with c_left:
-                st.write("**Manual**")
-                manual_diag = st.text_input("Diagnosa SIMRS (Ketik Manual)", key="manual_diag")
-                manual_kode = st.text_input("Kode ICD-10 (Ketik Manual)", key="manual_kode")
-                if st.button(" Simpan Pemetaan Manual"):
-                    if manual_diag and manual_kode:
-                        try:
-                            supabase.table('kamus_icd').upsert({'diagnosa_simrs': manual_diag, 'kode_icd': manual_kode}, on_conflict='diagnosa_simrs').execute()
-                            st.success("Pemetaan manual berhasil disimpan!")
-                        except Exception as e:
-                            st.error(f"Gagal simpan: {e}")
-                            
-            with c_right:
-                st.write("**Otomatis (Cari di Kamus)**")
-                search_icd = st.text_input("Cari Diagnosa di Kamus ICD-10", key="search_icd")
-                st.caption("Ketik nama penyakit (misal: Dengue) atau kode ICD-10 (misal: A91).")
-                search_term = search_icd.strip()
-                if search_term:
-                    try:
-                        res = (
-                            supabase.table('master_icd')
-                            .select('code', 'display')
-                            .or_(f'code.ilike.%{search_term}%,display.ilike.%{search_term}%')
-                            .limit(10)
-                            .execute()
-                        )
-                        if res.data:
-                            opsi_icd = [f"{r['code']} - {r['display']}" for r in res.data]
-                            pilih_icd = st.selectbox("Pilih kode yang sesuai:", opsi_icd)
-                            if st.button("Gunakan Kode Otomatis Ini"):
-                                st.info(f"Kode {pilih_icd.split(' - ')[0]} siap digunakan (Fitur ini opsional untuk melengkapi tabel).")
-                        else:
-                            st.warning("Diagnosa tidak ditemukan di kamus.")
-                    except Exception as e:
-                        st.error(f"Gagal mencari: {e}")
-
+            # Ambil data RL 4a dari fungsi yang sudah ada
             df_rl4a = hitung_rl_4a(df_long)
-            st.dataframe(df_rl4a, use_container_width=True)
-            buf_rl4a = io.BytesIO()
-            with pd.ExcelWriter(buf_rl4a, engine='openpyxl') as writer:
-                df_rl4a.to_excel(writer, index=False)
-            st.download_button(
-                "⬇️ Download RL 4a (Excel)",
-                data=buf_rl4a.getvalue(),
-                file_name="RL_4a.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="download_rl4a",
+
+            st.markdown("**Pemetaan Kode ICD-10 (Bisa langsung diedit di tabel)**")
+            st.info("Silakan ketik/pilih kode ICD-10 langsung di kolom terakhir. Lalu klik tombol Simpan di bawah.")
+
+            # Pastikan ada kolom Kode ICD di dataframe (jika belum ada, buat kosong)
+            if 'Kode ICD' not in df_rl4a.columns:
+                df_rl4a['Kode ICD'] = ""
+
+            # Tampilkan tabel interaktif
+            edited_df = st.data_editor(
+                df_rl4a,
+                column_config={
+                    "Kode ICD": st.column_config.TextColumn(
+                        "Kode ICD-10",
+                        help="Ketik kode di sini (misal: A91)",
+                        max_chars=10,
+                    )
+                },
+                use_container_width=True,
+                hide_index=True,
+                key="editor_icd"
             )
+
+            # Tombol Simpan ke Database
+            if st.button(" Simpan Pemetaan ICD dari Tabel"):
+                # Ambil data yang berubah (yang ada Kode ICD-nya)
+                df_simpan = edited_df[edited_df['Kode ICD'] != ""]
+
+                berhasil = 0
+                for idx, row in df_simpan.iterrows():
+                    diag = row['Diagnosa']
+                    kode = row['Kode ICD']
+                    try:
+                        supabase.table('kamus_icd').upsert({'diagnosa_simrs': diag, 'kode_icd': kode}, on_conflict='diagnosa_simrs').execute()
+                        berhasil += 1
+                    except Exception:
+                        pass
+
+                st.success(f"✅ {berhasil} pemetaan ICD-10 berhasil disimpan ke database!")
+                st.rerun()
 
         with st.expander(" Rekap Pasien per DPJP (Dokter)", expanded=False):
             st.write("Rekapitulasi jumlah pasien yang ditangani oleh masing-masing dokter.")
