@@ -250,6 +250,24 @@ with tab_master:
 with tab1:
     st.subheader(" Upload Data Mentah")
 
+    # FITUR MUAT DATA SUPABASE (YANG TADI ILANG)
+    with st.container(border=True):
+        st.write("**Muat Data dari Sesi Terakhir**")
+        if st.button(" Muat Data Terakhir dari Database"):
+            try:
+                res = supabase.table('riwayat_upload').select('*').order('created_at', desc=True).limit(1).execute()
+                if res.data:
+                    latest = res.data[0]
+                    data_json = latest['data_json']
+                    if isinstance(data_json, str):
+                        data_json = json.loads(data_json)
+                    st.session_state.df_clean = pd.DataFrame(data_json)
+                    st.success(f"✅ Berhasil memuat data dari file: {latest['nama_file']}")
+                else:
+                    st.warning("Belum ada riwayat data.")
+            except Exception as e:
+                st.error(f"Gagal memuat data: {e}")
+    
     with st.container(border=True):
         if st.session_state.df_mentah is not None and not st.session_state.df_mentah.empty:
             st.info(
@@ -265,7 +283,39 @@ with tab1:
                 uploaded = io.BytesIO(st.session_state.get("file_bytes_dash", b""))
                 uploaded.name = st.session_state.get("nama_file_dash", "data_dashboard.xlsx")
         else:
-            uploaded = st.file_uploader("Pilih file Excel (File Utama)", type=["xlsx", "xls"])
+            uploaded = st.file_uploader("Pilih file Excel", type=["xlsx", "xls"])
+
+        st.markdown("---")
+        st.markdown("###  Opsional: Merge Data Bulan Berikutnya")
+        st.info("Upload file Excel bulan berikutnya agar tanggal keluar pasien yang dirawat lintas bulan bisa terisi otomatis.")
+        uploaded_next = st.file_uploader("Upload file Excel bulan berikutnya (Opsional)", type=["xlsx", "xls"], key="upload_next")
+        df_next_raw = None
+        err_next = None
+        map_next_rm = "— Pilih kolom —"
+        map_next_keluar = "— Pilih kolom —"
+        if uploaded_next:
+            next_bytes = uploaded_next.getvalue()
+            next_sheets = get_sheet_names(next_bytes, uploaded_next.name)
+            if next_sheets and not next_sheets[0].startswith("ERROR:"):
+                next_sheet = st.selectbox("Pilih Sheet Bulan Depan:", next_sheets, key="sheet_next")
+                df_next_raw, err_next = load_sheet_by_name(next_bytes, next_sheet)
+
+                if not err_next:
+                    st.success("File bulan depan berhasil dibaca!")
+
+                    # HYBRID: Auto-Detect kolom untuk file bulan depan
+                    opts_next = ["— Pilih kolom —"] + list(df_next_raw.columns)
+                    def_next_rm = next((c for c in df_next_raw.columns if 'rm' in str(c).lower() or 'rekam' in str(c).lower()), opts_next[0])
+                    def_next_keluar = next((c for c in df_next_raw.columns if 'keluar' in str(c).lower()), opts_next[0])
+
+                    c_next1, c_next2 = st.columns(2)
+                    with c_next1:
+                        map_next_rm = st.selectbox("Kolom No. RM (Bulan Depan)", opts_next, index=opts_next.index(def_next_rm) if def_next_rm in opts_next else 0)
+                    with c_next2:
+                        map_next_keluar = st.selectbox("Kolom Tanggal Keluar (Bulan Depan)", opts_next, index=opts_next.index(def_next_keluar) if def_next_keluar in opts_next else 0)
+            else:
+                err_next = next_sheets[0] if next_sheets else "Sheet tidak ditemukan."
+                st.error(f"Gagal membaca file bulan berikutnya: {err_next}")
 
         if uploaded:
             file_bytes = uploaded.read()
@@ -308,40 +358,6 @@ with tab1:
                         # Deteksi otomatis kolom dokter
                         default_dokter = next((c for c in df.columns if 'dokter' in str(c).lower() or 'dpjp' in str(c).lower()), kolom_options[0])
                         map_dokter = st.selectbox("Kolom Dokter (DPJP)", kolom_options, index=kolom_options.index(default_dokter) if default_dokter in kolom_options else 0)
-
-                    st.markdown("---")
-                    st.markdown("###  Opsional: Merge Data Bulan Berikutnya")
-                    st.info("Upload file Excel bulan berikutnya agar tanggal keluar pasien yang dirawat lintas bulan bisa terisi otomatis.")
-                    uploaded_next = st.file_uploader("Upload file Excel bulan berikutnya (Opsional)", type=["xlsx", "xls"], key="upload_next")
-                    df_next_raw = None
-                    err_next = None
-                    map_next_rm = "— Pilih kolom —"
-                    map_next_keluar = "— Pilih kolom —"
-                    if uploaded_next:
-                        next_bytes = uploaded_next.getvalue()
-                        next_sheets = get_sheet_names(next_bytes, uploaded_next.name)
-                        if next_sheets and not next_sheets[0].startswith("ERROR:"):
-                            next_sheet = st.selectbox("Pilih Sheet Bulan Depan:", next_sheets, key="sheet_next")
-                            df_next_raw, err_next = load_sheet_by_name(next_bytes, next_sheet)
-
-                            if not err_next:
-                                st.success("File bulan depan berhasil dibaca!")
-
-                                # HYBRID: Auto-Detect kolom untuk file bulan depan
-                                opts_next = ["— Pilih kolom —"] + list(df_next_raw.columns)
-                                def_next_rm = next((c for c in df_next_raw.columns if 'rm' in str(c).lower() or 'rekam' in str(c).lower()), opts_next[0])
-                                def_next_keluar = next((c for c in df_next_raw.columns if 'keluar' in str(c).lower()), opts_next[0])
-
-                                c_next1, c_next2 = st.columns(2)
-                                with c_next1:
-                                    map_next_rm = st.selectbox("Kolom No. RM (Bulan Depan)", opts_next, index=opts_next.index(def_next_rm) if def_next_rm in opts_next else 0)
-                                with c_next2:
-                                    map_next_keluar = st.selectbox("Kolom Tanggal Keluar (Bulan Depan)", opts_next, index=opts_next.index(def_next_keluar) if def_next_keluar in opts_next else 0)
-                        else:
-                            err_next = next_sheets[0] if next_sheets else "Sheet tidak ditemukan."
-                            st.error(f"Gagal membaca file bulan berikutnya: {err_next}")
-
-                    st.markdown("---")
                     
                     if st.button(" Proses Data Pasien"):
                         # --- LOGIKA MERGE LINTAS BULAN ---
@@ -492,24 +508,6 @@ with tab1:
                     )
         else:
             st.warning("Kolom tanggal masuk tidak ditemukan atau kosong. Pastikan pemetaan tanggal sudah benar.")
-
-    with st.container(border=True):
-        st.subheader(" Muat Data dari Sesi Terakhir")
-        st.write("Gunakan fitur ini jika Anda ingin memunculkan kembali data yang terakhir kali diproses dari database.")
-        if st.button(" Muat Data Terakhir dari Database"):
-            try:
-                res = supabase.table('riwayat_upload').select('*').order('created_at', desc=True).limit(1).execute()
-                if res.data:
-                    latest = res.data[0]
-                    data_json = latest['data_json']
-                    if isinstance(data_json, str):
-                        data_json = json.loads(data_json)
-                    st.session_state.df_clean = pd.DataFrame(data_json)
-                    st.success(f"✅ Berhasil memuat data dari file: {latest['nama_file']}")
-                else:
-                    st.warning("Belum ada riwayat data.")
-            except Exception as e:
-                st.error(f"Gagal memuat data: {e}")
 
 # --- TAB: MUTASI ---
 with tab2:
