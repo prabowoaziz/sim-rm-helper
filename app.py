@@ -235,12 +235,39 @@ with tab_master:
                 supabase.table('master_tt').upsert(data_tt, on_conflict='ruangan').execute()
                 st.success('Master TT tersimpan di database!')
     with st.expander("️ Master Kelas Kamar", expanded=False):
-        opsi_kelas = ["VIP", "1", "2", "3", "Khusus (HCU/ICU/NICU/PICU)"]
+        opsi_kelas = ['VIP', '1', '2', '3', 'HCU', 'ICU', 'NICU', 'PICU', 'Perina', 'Isolasi Normal', 'Isolasi-ICU', 'Transit IGD']
         for nama_ruangan in st.session_state.master_tt:
             kolom_nama_ruangan, kolom_pilih_kelas = st.columns([2, 3])
             kolom_nama_ruangan.write(nama_ruangan)
-            kelas_saat_ini = st.session_state.master_kelas.get(nama_ruangan, "1")
-            index_kelas = opsi_kelas.index(kelas_saat_ini) if kelas_saat_ini in opsi_kelas else 1
+            nama_lower = nama_ruangan.lower()
+            if 'isolasi-icu' in nama_lower:
+                kelas_default = 'Isolasi-ICU'
+            elif 'hcu' in nama_lower:
+                kelas_default = 'HCU'
+            elif 'nicu' in nama_lower:
+                kelas_default = 'NICU'
+            elif 'picu' in nama_lower:
+                kelas_default = 'PICU'
+            elif 'icu' in nama_lower:
+                kelas_default = 'ICU'
+            elif 'perina' in nama_lower:
+                kelas_default = 'Perina'
+            elif 'sakinah' in nama_lower:
+                kelas_default = 'Isolasi Normal'
+            elif 'firdaus' in nama_lower:
+                kelas_default = 'VIP'
+            elif 'ar rahmah' in nama_lower:
+                kelas_default = '1'
+            elif 'safa' in nama_lower:
+                kelas_default = '2'
+            elif 'marwah' in nama_lower:
+                kelas_default = '3'
+            elif 'transit' in nama_lower:
+                kelas_default = 'Transit IGD'
+            else:
+                kelas_default = '1'
+            kelas_saat_ini = st.session_state.master_kelas.get(nama_ruangan, kelas_default)
+            index_kelas = opsi_kelas.index(kelas_saat_ini) if kelas_saat_ini in opsi_kelas else opsi_kelas.index(kelas_default)
             pilihan_kelas = kolom_pilih_kelas.selectbox(
                 f"Kelas untuk {nama_ruangan}",
                 opsi_kelas,
