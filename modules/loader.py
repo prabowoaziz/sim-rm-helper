@@ -107,37 +107,28 @@ def detect_sheet_group(sheet_name):
     return max(matches, default=(0, None))[1]
 
 
-def load_sheet_by_name(file, sheet_name):
-    """Load and normalize a known inpatient sheet; return ``(df, error)``."""
+@st.cache_data(show_spinner=False)
+def load_sheet_by_name(file_bytes, file_name, sheet_name):
+    """Load and normalize one sheet from immutable file bytes; return ``(df, error)``."""
     try:
-        file_name = getattr(file, "name", "")
-        source = file
-        if isinstance(file, (bytes, bytearray)):
-            source = io.BytesIO(file)
-        elif hasattr(file, "seek"):
-            file.seek(0)
-
-        if str(file_name).casefold().endswith(".csv"):
+        source = io.BytesIO(file_bytes)
+        is_csv = str(file_name).casefold().endswith('.csv')
+        if is_csv:
             df = pd.read_csv(source)
             mapping = None
         else:
             group = detect_sheet_group(sheet_name)
-            if group == "15col_no_header":
-                df = pd.read_excel(source, sheet_name=sheet_name, header=None)
+            df = pd.read_excel(source, sheet_name=sheet_name, header=None)
+            if group in ('15col_no_header', '15col_partial_header'):
                 mapping = MAPPING_15COL
-            elif group == "14col_partial_header":
-                df = pd.read_excel(source, sheet_name=sheet_name, header=None)
+            elif group == '14col_partial_header':
                 mapping = MAPPING_14COL
-            elif group == "15col_partial_header":
-                df = pd.read_excel(source, sheet_name=sheet_name, header=None)
-                mapping = MAPPING_15COL
             else:
-                df = pd.read_excel(source, sheet_name=sheet_name, header=None)
                 mapping = None
 
         if mapping is not None:
             df = df.rename(columns=mapping)
-        elif not str(file_name).casefold().endswith(".csv"):
+        elif not is_csv:
             df.columns = _default_excel_column_names(len(df.columns))
 
         if {"nama_lengkap", "no_rm"}.issubset(df.columns):
@@ -162,15 +153,10 @@ def get_sheet_names(file_bytes, file_name):
 
 @st.cache_data(show_spinner=False)
 def load_data(file_bytes, file_name, sheet_name=None):
-    try:
-        # Bungkus bytes ke BytesIO
-        file_obj = io.BytesIO(file_bytes)
-        
-        if file_name.endswith('.csv'):
-            df = pd.read_csv(file_obj)
-        else:
-            df = pd.read_excel(file_obj, sheet_name=sheet_name, header=None)
-            df.columns = _default_excel_column_names(len(df.columns))
-        return df, None
-    except Exception as e:
-        return None, str(e)
+    """Compatibility wrapper; keep all file parsing in the cached sheet loader."""
+    if sheet_name is None:
+        sheets = get_sheet_names(file_bytes, file_name)
+        if not sheets or sheets[0].startswith('ERROR:'):
+            return None, sheets[0] if sheets else 'Sheet tidak ditemukan.'
+        sheet_name = sheets[0]
+    return load_sheet_by_name(file_bytes, file_name, sheet_name)
