@@ -351,4 +351,7 @@ def clean_dataframe_vectorized(df_mentah, mapping_dict, master_kelas,
         'dokter': dokter,
     }, index=df_mentah.index)
     result = result.reset_index(drop=True)
-    return result[result['nama'].notna()].copy()
+    df_clean = result[result['nama'].notna()].copy()
+    if "dokter" not in df_clean.columns:
+        df_clean["dokter"] = None
+    return df_clean
