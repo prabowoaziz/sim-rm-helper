@@ -9,7 +9,11 @@ from modules.loader import get_sheet_names, load_sheet_by_name
 from modules.cleaner import clean_dataframe_vectorized
 from modules.tracker import track_perpindahan
 from modules.bor_calculator import hitung_bor, hitung_bor_harian, hitung_rata_rata_bor
-from modules.reporter import hitung_statistik_dan_mortalitas, hitung_rl_31, hitung_rl_4a
+from modules.reporter import (
+    hitung_statistik_dan_mortalitas, hitung_rl_31, hitung_rl_4a,
+    hitung_rekap_penyakit, hitung_rekap_dpjp,
+)
+from modules.icd_loader import upload_icd_to_supabase, load_kamus_icd, save_kamus_icd
 from modules.master_data import (
     MASTER_TT_DEFAULT, MASTER_KELAS_DEFAULT, MASTER_DIHITUNG_BOR_DEFAULT,
     normalisasi_ruang, total_tt_dihitung, load_master_from_supabase,
@@ -45,13 +49,13 @@ def _cached_statistics(df_long, cache_key):
 
 
 @st.cache_data(show_spinner=False)
-def _cached_rl31(df_long, cache_key):
-    return hitung_rl_31(df_long)
+def _cached_rl31(df_long, cache_key, periode_tahun, periode_bulan):
+    return hitung_rl_31(df_long, periode_tahun, periode_bulan)
 
 
 @st.cache_data(show_spinner=False)
-def _cached_rl4a(df_long, cache_key):
-    return hitung_rl_4a(df_long)
+def _cached_rl4a(df_long, cache_key, kamus_icd):
+    return hitung_rl_4a(df_long, kamus_icd=kamus_icd)
 
 
 @st.cache_data(show_spinner=False)
@@ -344,13 +348,8 @@ with tab_master:
                 if st.button(" Import ICD-10 ke Supabase"):
                     with st.spinner("Mengimpor data ICD-10..."):
                         try:
-                            df_icd = pd.read_excel(uploaded_icd)
-                            df_icd = df_icd[['CODE', 'DISPLAY', 'VERSION']].dropna()
-                            data_icd = df_icd.to_dict('records')
-                            for i in range(0, len(data_icd), 500):
-                                supabase.table('master_icd').upsert(data_icd[i:i+500], on_conflict='code').execute()
-                                
-                            st.success(f"✅ Berhasil mengimpor {len(data_icd)} kode ICD-10!")
+                            total = upload_icd_to_supabase(uploaded_icd.getvalue(), supabase)
+                            st.success(f"✅ {total} kode ICD-10 berhasil di-import!")
                         except Exception as e:
                             st.error(f"Gagal import: {e}")
 
@@ -694,7 +693,12 @@ with tab4:
                 )
             
         with st.expander(" RL 3.1 — Kegiatan Ranap", expanded=False):
-            df_rl31 = _cached_rl31(df_long, st.session_state.df_clean_hash)
+            _periode_awal = st.session_state.get('periode_awal')
+            _periode_tahun = _periode_awal.year if _periode_awal else None
+            _periode_bulan = _periode_awal.month if _periode_awal else None
+            df_rl31 = _cached_rl31(
+                df_long, st.session_state.df_clean_hash, _periode_tahun, _periode_bulan
+            )
             st.dataframe(df_rl31, use_container_width=True)
             if st.button("Siapkan Excel RL 3.1", key="prepare_rl31"):
                 st.session_state.rl31_excel = _cached_excel_bytes(
@@ -711,21 +715,22 @@ with tab4:
                 )
             
         with st.expander(" RL 4a — Morbiditas Rawat Inap & ICD-10", expanded=False):
-            # Ambil data RL 4a dari fungsi yang sudah ada
-            df_rl4a = _cached_rl4a(df_long, st.session_state.df_clean_hash)
+            if 'kamus_icd' not in st.session_state:
+                st.session_state.kamus_icd = load_kamus_icd(supabase)
+            kamus = st.session_state.kamus_icd
+            df_rl4a = _cached_rl4a(df_long, st.session_state.df_clean_hash, kamus)
 
             st.markdown("**Pemetaan Kode ICD-10 (Bisa langsung diedit di tabel)**")
             st.info("Silakan ketik/pilih kode ICD-10 langsung di kolom terakhir. Lalu klik tombol Simpan di bawah.")
 
-            # Pastikan ada kolom Kode ICD di dataframe (jika belum ada, buat kosong)
-            if 'Kode ICD' not in df_rl4a.columns:
-                df_rl4a['Kode ICD'] = ""
+            if 'Kode ICD-10' not in df_rl4a.columns:
+                df_rl4a['Kode ICD-10'] = ""
 
             # Tampilkan tabel interaktif
             edited_df = st.data_editor(
                 df_rl4a,
                 column_config={
-                    "Kode ICD": st.column_config.TextColumn(
+                    "Kode ICD-10": st.column_config.TextColumn(
                         "Kode ICD-10",
                         help="Ketik kode di sini (misal: A91)",
                         max_chars=10,
@@ -738,15 +743,15 @@ with tab4:
 
             # Tombol Simpan ke Database
             if st.button(" Simpan Pemetaan ICD dari Tabel"):
-                # Ambil data yang berubah (yang ada Kode ICD-nya)
-                df_simpan = edited_df[edited_df['Kode ICD'] != ""]
+                df_simpan = edited_df[edited_df['Kode ICD-10'].astype(str).str.strip() != ""]
 
                 berhasil = 0
                 for idx, row in df_simpan.iterrows():
                     diag = row['Diagnosa']
-                    kode = row['Kode ICD']
+                    kode = row['Kode ICD-10']
                     try:
-                        supabase.table('kamus_icd').upsert({'diagnosa_simrs': diag, 'kode_icd': kode}, on_conflict='diagnosa_simrs').execute()
+                        save_kamus_icd(supabase, diag, kode)
+                        st.session_state.kamus_icd[str(diag).strip()] = str(kode).strip()
                         berhasil += 1
                     except Exception:
                         pass
@@ -756,36 +761,29 @@ with tab4:
 
         with st.expander('Jumlah Penyakit Terbanyak', expanded=False):
             st.write('Rekapitulasi jumlah pasien per diagnosa, diurutkan dari terbanyak ke tersedikit.')
-            df_clean_laporan = st.session_state.df_clean
-            if 'diagnosa' in df_clean_laporan.columns:
-                df_penyakit = df_clean_laporan.copy()
-                df_penyakit['diagnosa'] = df_penyakit['diagnosa'].astype(str).str.strip()
-                df_penyakit = df_penyakit[df_penyakit['diagnosa'].notna()]
-                df_penyakit = df_penyakit[df_penyakit['diagnosa'] != '']
-                df_penyakit = df_penyakit[df_penyakit['diagnosa'].str.lower() != 'nan']
-                df_penyakit = df_penyakit[df_penyakit['diagnosa'].str.lower() != 'tidak ada diagnosa']
-
-                rekap_penyakit = df_penyakit.groupby('diagnosa').agg(
-                    jumlah_pasien=('no_rm', 'nunique'),
-                    jumlah_kunjungan=('no_rm', 'count')
-                ).reset_index()
-                rekap_penyakit = rekap_penyakit.sort_values('jumlah_pasien', ascending=False).reset_index(drop=True)
+            rekap_penyakit = hitung_rekap_penyakit(df_long)
+            if not rekap_penyakit.empty:
+                rekap_penyakit = rekap_penyakit.rename(columns={
+                    'jumlah_episode': 'Jumlah Pasien / Jumlah Episode',
+                    'jumlah_pasien_unik': 'Jumlah Pasien Unik',
+                    'persentase': 'Persentase',
+                })
+                rekap_penyakit['Persentase'] = rekap_penyakit['Persentase'].map(lambda nilai: f'{nilai:.2f}%')
                 rekap_penyakit.index = rekap_penyakit.index + 1
                 rekap_penyakit.index.name = 'No'
 
-                total_pasien = rekap_penyakit['jumlah_pasien'].sum()
-                rekap_penyakit['persentase'] = (rekap_penyakit['jumlah_pasien'] / total_pasien * 100).round(2).astype(str) + '%'
+                total_pasien = rekap_penyakit['Jumlah Pasien / Jumlah Episode'].sum()
 
                 c1, c2, c3 = st.columns(3)
                 c1.metric('Total Diagnosa Unik', len(rekap_penyakit))
                 c2.metric('Total Pasien', total_pasien)
                 c3.metric('Diagnosa Terbanyak', rekap_penyakit.iloc[0]['diagnosa'] if len(rekap_penyakit) > 0 else '-')
 
-                top_n = st.slider('Tampilkan Top N', min_value=5, max_value=min(100, len(rekap_penyakit)), value=min(20, len(rekap_penyakit)), key='slider_penyakit')
+                top_n = st.slider('Tampilkan Top N', min_value=min(5, len(rekap_penyakit)), max_value=min(100, len(rekap_penyakit)), value=min(20, len(rekap_penyakit)), key='slider_penyakit')
                 st.dataframe(rekap_penyakit.head(top_n), use_container_width=True)
 
                 st.markdown('**10 Penyakit Terbanyak**')
-                top10 = rekap_penyakit.head(10).set_index('diagnosa')['jumlah_pasien']
+                top10 = rekap_penyakit.head(10).set_index('diagnosa')['Jumlah Pasien / Jumlah Episode']
                 st.bar_chart(top10)
 
                 if st.button('Siapkan Excel Rekap Penyakit', key='prepare_penyakit_excel'):
@@ -803,19 +801,12 @@ with tab4:
                         key='dl_penyakit'
                     )
             else:
-                st.warning('Kolom diagnosa tidak ditemukan.')
+                st.warning('Belum ada diagnosa yang dapat direkap.')
         with st.expander(" Rekap Pasien per DPJP (Dokter)", expanded=False):
             st.write("Rekapitulasi jumlah pasien yang ditangani oleh masing-masing dokter.")
 
-            df_clean = st.session_state.df_clean
-            if 'dokter' in df_clean.columns:
-                rekap_dpjp = df_clean.groupby('dokter')['no_rm'].nunique().reset_index()
-                rekap_dpjp.columns = ['Nama Dokter (DPJP)', 'Jumlah Pasien Unik']
-                rekap_dpjp = rekap_dpjp.sort_values(by='Jumlah Pasien Unik', ascending=False)
-
-                # Hapus baris yang dokternya kosong (NaN)
-                rekap_dpjp = rekap_dpjp.dropna(subset=['Nama Dokter (DPJP)'])
-
+            rekap_dpjp = hitung_rekap_dpjp(df_long)
+            if not rekap_dpjp.empty:
                 st.dataframe(rekap_dpjp, use_container_width=True, hide_index=True)
 
                 if st.button("Siapkan Excel Rekap DPJP", key="prepare_dpjp_excel"):
@@ -832,4 +823,4 @@ with tab4:
                         key="dl_dpjp"
                     )
             else:
-                st.warning("Kolom dokter tidak ditemukan. Pastikan sudah di-map di Tab Upload.")
+                st.warning("Kolom dokter tidak ditemukan atau belum ada dokter untuk direkap. Pastikan sudah di-map di Tab Upload.")
