@@ -6,7 +6,7 @@ import hashlib
 from supabase import create_client, Client
 
 from modules.loader import get_sheet_names, load_sheet_by_name
-from modules.cleaner import clean_nama, split_jk_umur, parse_kamar, clean_kelas
+from modules.cleaner import clean_dataframe_vectorized
 from modules.tracker import track_perpindahan
 from modules.bor_calculator import hitung_bor, hitung_bor_harian, hitung_rata_rata_bor
 from modules.reporter import hitung_statistik_dan_mortalitas, hitung_rl_31, hitung_rl_4a
@@ -14,6 +14,53 @@ from modules.master_data import (
     MASTER_TT_DEFAULT, MASTER_KELAS_DEFAULT, MASTER_DIHITUNG_BOR_DEFAULT,
     normalisasi_ruang, total_tt_dihitung, load_master_from_supabase,
 )
+
+
+def _dataframe_hash(df):
+    values = pd.util.hash_pandas_object(df, index=True).values.tobytes()
+    return hashlib.sha256(values).hexdigest()
+
+
+@st.cache_data(show_spinner=False)
+def _cached_track_perpindahan(df_clean, cache_key):
+    return track_perpindahan(df_clean)
+
+
+@st.cache_data(show_spinner=False)
+def _cached_hitung_bor(df_long, master_tt, master_flags, periode_awal, periode_akhir):
+    return hitung_bor(df_long, master_tt, master_flags,
+                      periode_awal=periode_awal, periode_akhir=periode_akhir)
+
+
+@st.cache_data(show_spinner=False)
+def _cached_hitung_bor_harian(df_long, kapasitas_tt, periode_awal, periode_akhir, master_flags):
+    return hitung_bor_harian(df_long, kapasitas_tt,
+                             periode_awal=periode_awal, periode_akhir=periode_akhir,
+                             master_dihitung_bor=master_flags)
+
+
+@st.cache_data(show_spinner=False)
+def _cached_statistics(df_long, cache_key):
+    return hitung_statistik_dan_mortalitas(df_long)
+
+
+@st.cache_data(show_spinner=False)
+def _cached_rl31(df_long, cache_key):
+    return hitung_rl_31(df_long)
+
+
+@st.cache_data(show_spinner=False)
+def _cached_rl4a(df_long, cache_key):
+    return hitung_rl_4a(df_long)
+
+
+@st.cache_data(show_spinner=False)
+def _cached_excel_bytes(frames, sheet_names, include_indexes):
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        for frame, sheet_name, include_index in zip(frames, sheet_names, include_indexes):
+            frame.to_excel(writer, sheet_name=sheet_name, index=include_index)
+    return buffer.getvalue()
 
 # ==========================================
 # 1. KONFIGURASI HALAMAN
@@ -137,6 +184,8 @@ with st.container(border=True):
 # ==========================================
 if "df_mentah" not in st.session_state: st.session_state.df_mentah = None
 if "df_clean" not in st.session_state: st.session_state.df_clean = None
+if st.session_state.df_clean is not None and not st.session_state.get('df_clean_hash'):
+    st.session_state.df_clean_hash = _dataframe_hash(st.session_state.df_clean)
 if 'master_tt' not in st.session_state:
     st.session_state.master_tt = dict(MASTER_TT_DEFAULT)
 if 'master_kelas' not in st.session_state:
@@ -178,7 +227,9 @@ with tab_dash:
                     st.error(f"Gagal membaca file: {sheet_names_dash[0]}")
                 else:
                     selected_sheet_dash = sheet_names_dash[0]
-                    df_dash, error_dash = load_sheet_by_name(file_bytes_dash, selected_sheet_dash)
+                    df_dash, error_dash = load_sheet_by_name(
+                        file_bytes_dash, uploaded_dash.name, selected_sheet_dash
+                    )
                     if error_dash:
                         st.error(f"Gagal membaca file: {error_dash}")
                     else:
@@ -319,6 +370,7 @@ with tab1:
                     if isinstance(data_json, str):
                         data_json = json.loads(data_json)
                     st.session_state.df_clean = pd.DataFrame(data_json)
+                    st.session_state.df_clean_hash = _dataframe_hash(st.session_state.df_clean)
                     st.success(f"✅ Berhasil memuat data dari file: {latest['nama_file']}")
                 else:
                     st.warning("Belum ada riwayat data.")
@@ -363,7 +415,7 @@ with tab1:
             
             if sheet_names:
                 selected_sheet = st.selectbox(" Pilih Sheet:", sheet_names) if len(sheet_names) > 1 else sheet_names[0]
-                df, error = load_sheet_by_name(file_bytes, selected_sheet)
+                df, error = load_sheet_by_name(file_bytes, uploaded.name, selected_sheet)
                 
                 if error:
                     st.error(f"❌ Error: {error}")
@@ -412,7 +464,9 @@ with tab1:
                                 f_sheets = get_sheet_names(f_bytes, file_upload.name)
                                 if not f_sheets or f_sheets[0].startswith("ERROR:"):
                                     return {}
-                                f_df, f_err = load_sheet_by_name(f_bytes, f_sheets[0])
+                                f_df, f_err = load_sheet_by_name(
+                                    f_bytes, file_upload.name, f_sheets[0]
+                                )
                                 if f_err:
                                     return {}
 
@@ -421,12 +475,13 @@ with tab1:
 
                                 res_dict = {}
                                 if c_rm and c_tgl:
-                                    for _, r in f_df.iterrows():
-                                        rm_value = r[c_rm]
-                                        rm = str(rm_value).replace('.0', '').strip() if pd.notna(rm_value) else ""
-                                        tgl = pd.to_datetime(r[c_tgl], errors='coerce')
-                                        if pd.notna(tgl) and rm not in ["", "None", "nan"]:
-                                            res_dict[rm] = tgl
+                                    rms = f_df[c_rm].map(
+                                        lambda value: str(value).replace('.0', '').strip()
+                                        if pd.notna(value) else ''
+                                    )
+                                    dates = pd.to_datetime(f_df[c_tgl], errors='coerce')
+                                    valid = dates.notna() & ~rms.isin(['', 'None', 'nan'])
+                                    res_dict = dict(zip(rms.loc[valid], dates.loc[valid]))
                                 return res_dict
                             except Exception:
                                 return {}
@@ -437,72 +492,44 @@ with tab1:
                             dict_next = ambil_data_tambahan(uploaded_next, mode="next")
                         # ---------------------------------
 
-                        data_bersih = []
-
-                        for idx, row in df.iterrows():
-                            raw_nama = row[map_nama] if map_nama != "— Pilih kolom —" else ""
-                            raw_jk = row[map_jk] if map_jk != "— Pilih kolom —" else ""
-                            # Ambil RM dan Tanggal dari file UTAMA
-                            rm_utama = str(row[map_rm]).replace('.0', '').strip() if map_rm != "— Pilih kolom —" else None
-
-                            tgl_masuk_utama = pd.to_datetime(row[map_masuk], errors='coerce') if map_masuk != "— Pilih kolom —" else pd.NaT
-                            if pd.isna(tgl_masuk_utama) and rm_utama in dict_prev:
-                                tgl_masuk_final = dict_prev[rm_utama]
-                            else:
-                                tgl_masuk_final = tgl_masuk_utama
-
-                            tgl_keluar_utama = pd.to_datetime(row[map_keluar], errors='coerce') if map_keluar != "— Pilih kolom —" else pd.NaT
-                            if pd.isna(tgl_keluar_utama) and rm_utama in dict_next:
-                                tgl_keluar_final = dict_next[rm_utama]
-                            else:
-                                tgl_keluar_final = tgl_keluar_utama
-                            no_rm = rm_utama if rm_utama not in (None, "None", "nan") else None
-                            
-                            nama_bersih = clean_nama(raw_nama)
-                            jk, umur = split_jk_umur(f"{raw_nama} {raw_jk}")
-                            kode_kamar, ruang, kelas_kamar = parse_kamar(row[map_kamar] if map_kamar != "— Pilih kolom —" else "")
-                            raw_kelas = row[map_kelas] if map_kelas != "— Pilih kolom —" else None
-                            kelas_dari_master = st.session_state.master_kelas.get(ruang, "Tidak Diketahui")
-                            kelas_jaminan = clean_kelas(raw_kelas)
-                            kelas = kelas_dari_master
-                            
-                            data_bersih.append({
-                                "no_rm": no_rm,
-                                "nama": nama_bersih,
-                                "jenis_kelamin": jk,
-                                "umur_tahun": umur,
-                                "kode_kamar": kode_kamar,
-                                "ruang": ruang,
-                                "kelas": kelas,
-                                "tgl_masuk": tgl_masuk_final,
-                                "tgl_keluar": tgl_keluar_final,
-                                "status_pulang": row[map_status] if map_status != "— Pilih kolom —" else None,
-                                "kelas_jaminan": kelas_jaminan,
-                                "diagnosa": str(row[map_diag]).strip() if map_diag != "— Pilih kolom —" else "Tidak Ada Diagnosa",
-                                "dokter": row[map_dokter] if map_dokter != "— Pilih kolom —" else None,
-                            })
-                        
-                        df_clean = pd.DataFrame(data_bersih)
-                        df_clean = df_clean[df_clean['nama'].notna()]  # hanya drop yang nama kosong, no_rm boleh kosong
+                        mapping_dict = {
+                            'map_nama': map_nama, 'map_jk': map_jk, 'map_rm': map_rm,
+                            'map_kamar': map_kamar, 'map_masuk': map_masuk,
+                            'map_keluar': map_keluar, 'map_status': map_status,
+                            'map_kelas': map_kelas, 'map_diag': map_diag,
+                            'map_dokter': map_dokter,
+                        }
+                        df_clean = clean_dataframe_vectorized(
+                            df, mapping_dict, st.session_state.master_kelas,
+                            dict_prev=dict_prev, dict_next=dict_next,
+                        )
                         st.session_state.df_clean = df_clean
+                        st.session_state.df_clean_hash = _dataframe_hash(df_clean)
                         
                         # Otomatis simpan ke Supabase (riwayat_upload)
-                        try:
-                            data_json = df_clean.to_json(orient='records', date_format='iso')
-                            supabase.table('riwayat_upload').insert({'nama_file': uploaded.name, 'data_json': data_json}).execute()
-                            st.success(f"✅ Berhasil memproses {len(df_clean)} baris data dan menyimpannya ke database!")
-                        except Exception as e:
-                            st.warning(f"Data diproses, tapi gagal simpan ke database: {e}")
+                        with st.spinner("Menyimpan riwayat upload..."):
+                            try:
+                                data_json = df_clean.to_json(orient='records', date_format='iso')
+                                supabase.table('riwayat_upload').insert({'nama_file': uploaded.name, 'data_json': data_json}).execute()
+                                st.success(f"✅ Berhasil memproses {len(df_clean)} baris data dan menyimpannya ke database!")
+                            except Exception as e:
+                                st.warning(f"Data diproses, tapi gagal simpan ke database: {e}")
 
     if st.session_state.df_clean is not None:
         with st.container(border=True):
             st.subheader("✅ Preview Data Bersih")
             st.dataframe(st.session_state.df_clean, use_container_width=True)
-            
-            buf = io.BytesIO()
-            with pd.ExcelWriter(buf, engine='openpyxl') as writer:
-                st.session_state.df_clean.to_excel(writer, index=False)
-            st.download_button("⬇️ Download Data Bersih", data=buf.getvalue(), file_name="Data_Bersih.xlsx")
+            if st.button("Siapkan Excel Data Bersih", key="prepare_clean_excel"):
+                st.session_state.clean_excel_bytes = _cached_excel_bytes(
+                    (st.session_state.df_clean,), ('Data Bersih',), (False,)
+                )
+                st.session_state.clean_excel_hash = st.session_state.df_clean_hash
+            if st.session_state.get('clean_excel_hash') == st.session_state.df_clean_hash:
+                st.download_button(
+                    "⬇️ Download Data Bersih",
+                    data=st.session_state.clean_excel_bytes,
+                    file_name="Data_Bersih.xlsx",
+                )
 
         st.markdown("---")
         st.markdown("###  Download Laporan Per Kamar (Multi-Sheet)")
@@ -579,7 +606,9 @@ with tab2:
         st.info("Silakan upload dan proses data terlebih dahulu.")
     else:
         with st.container(border=True):
-            df_long = track_perpindahan(st.session_state.df_clean)
+            df_long = _cached_track_perpindahan(
+                st.session_state.df_clean, st.session_state.df_clean_hash
+            )
             st.dataframe(df_long, use_container_width=True)
 
 # --- TAB: BOR ---
@@ -593,17 +622,18 @@ with tab3:
         st.error("Tanggal akhir harus >= tanggal awal.")
     else:
         with st.container(border=True):
-            df_long = track_perpindahan(st.session_state.df_clean)
+            df_long = _cached_track_perpindahan(
+                st.session_state.df_clean, st.session_state.df_clean_hash
+            )
             if 'ruang' in df_long.columns:
                 df_long['ruang'] = df_long['ruang'].map(normalisasi_ruang)
             master_dihitung_bor_bor = {
                 normalisasi_ruang(ruang): value
                 for ruang, value in st.session_state.master_dihitung_bor.items()
             }
-            df_bor = hitung_bor(
+            df_bor = _cached_hitung_bor(
                 df_long, st.session_state.master_tt, master_dihitung_bor_bor,
-                periode_awal=st.session_state.periode_awal,
-                periode_akhir=st.session_state.periode_akhir,
+                st.session_state.periode_awal, st.session_state.periode_akhir,
             )
             
             if not df_bor.empty:
@@ -620,11 +650,10 @@ with tab3:
             total_tt_aktif = total_tt_dihitung(
                 st.session_state.master_tt, st.session_state.master_dihitung_bor
             )
-            df_harian = hitung_bor_harian(
+            df_harian = _cached_hitung_bor_harian(
                 df_long, total_tt_aktif,
-                periode_awal=st.session_state.periode_awal,
-                periode_akhir=st.session_state.periode_akhir,
-                master_dihitung_bor=master_dihitung_bor_bor,
+                st.session_state.periode_awal, st.session_state.periode_akhir,
+                master_dihitung_bor_bor,
             )
             rata_rata = hitung_rata_rata_bor(df_harian)
             st.metric("Rata-rata BOR Harian", f"{rata_rata}%")
@@ -642,41 +671,48 @@ with tab4:
     elif st.session_state.periode_akhir < st.session_state.periode_awal:
         st.error("Tanggal akhir harus >= tanggal awal.")
     else:
-        df_long = track_perpindahan(st.session_state.df_clean)
+        df_long = _cached_track_perpindahan(
+            st.session_state.df_clean, st.session_state.df_clean_hash
+        )
         
         with st.expander(" Laporan Statistik & Mortalitas", expanded=False):
-            status_counts, mortalitas_df = hitung_statistik_dan_mortalitas(df_long)
+            status_counts, mortalitas_df = _cached_statistics(df_long, st.session_state.df_clean_hash)
             st.dataframe(status_counts, use_container_width=True)
             st.dataframe(mortalitas_df, use_container_width=True)
-            buf_stat_mortalitas = io.BytesIO()
-            with pd.ExcelWriter(buf_stat_mortalitas, engine='openpyxl') as writer:
-                status_counts.to_excel(writer, sheet_name="Statistik", index=False)
-                mortalitas_df.to_excel(writer, sheet_name="Mortalitas", index=False)
-            st.download_button(
-                "⬇️ Download Statistik & Mortalitas (Excel)",
-                data=buf_stat_mortalitas.getvalue(),
-                file_name="Statistik_Mortalitas.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="download_statistik_mortalitas",
-            )
+            if st.button("Siapkan Excel Statistik & Mortalitas", key="prepare_statistik_mortalitas"):
+                st.session_state.stat_mortalitas_excel = _cached_excel_bytes(
+                    (status_counts, mortalitas_df), ('Statistik', 'Mortalitas'), (False, False)
+                )
+                st.session_state.stat_mortalitas_excel_hash = st.session_state.df_clean_hash
+            if st.session_state.get('stat_mortalitas_excel_hash') == st.session_state.df_clean_hash:
+                st.download_button(
+                    "⬇️ Download Statistik & Mortalitas (Excel)",
+                    data=st.session_state.stat_mortalitas_excel,
+                    file_name="Statistik_Mortalitas.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="download_statistik_mortalitas",
+                )
             
         with st.expander(" RL 3.1 — Kegiatan Ranap", expanded=False):
-            df_rl31 = hitung_rl_31(df_long)
+            df_rl31 = _cached_rl31(df_long, st.session_state.df_clean_hash)
             st.dataframe(df_rl31, use_container_width=True)
-            buf_rl31 = io.BytesIO()
-            with pd.ExcelWriter(buf_rl31, engine='openpyxl') as writer:
-                df_rl31.to_excel(writer, index=False)
-            st.download_button(
-                "⬇️ Download RL 3.1 (Excel)",
-                data=buf_rl31.getvalue(),
-                file_name="RL_3.1.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="download_rl31",
-            )
+            if st.button("Siapkan Excel RL 3.1", key="prepare_rl31"):
+                st.session_state.rl31_excel = _cached_excel_bytes(
+                    (df_rl31,), ('RL 3.1',), (False,)
+                )
+                st.session_state.rl31_excel_hash = st.session_state.df_clean_hash
+            if st.session_state.get('rl31_excel_hash') == st.session_state.df_clean_hash:
+                st.download_button(
+                    "⬇️ Download RL 3.1 (Excel)",
+                    data=st.session_state.rl31_excel,
+                    file_name="RL_3.1.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="download_rl31",
+                )
             
         with st.expander(" RL 4a — Morbiditas Rawat Inap & ICD-10", expanded=False):
             # Ambil data RL 4a dari fungsi yang sudah ada
-            df_rl4a = hitung_rl_4a(df_long)
+            df_rl4a = _cached_rl4a(df_long, st.session_state.df_clean_hash)
 
             st.markdown("**Pemetaan Kode ICD-10 (Bisa langsung diedit di tabel)**")
             st.info("Silakan ketik/pilih kode ICD-10 langsung di kolom terakhir. Lalu klik tombol Simpan di bawah.")
@@ -752,17 +788,20 @@ with tab4:
                 top10 = rekap_penyakit.head(10).set_index('diagnosa')['jumlah_pasien']
                 st.bar_chart(top10)
 
-                buf_penyakit = io.BytesIO()
-                with pd.ExcelWriter(buf_penyakit, engine='openpyxl') as writer:
-                    rekap_penyakit.to_excel(writer, sheet_name='Semua Penyakit')
-                    rekap_penyakit.head(10).to_excel(writer, sheet_name='Top 10')
-                st.download_button(
-                    'Download Rekap Penyakit (Excel)',
-                    data=buf_penyakit.getvalue(),
-                    file_name='Rekap_Penyakit_Terbanyak.xlsx',
-                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                    key='dl_penyakit'
-                )
+                if st.button('Siapkan Excel Rekap Penyakit', key='prepare_penyakit_excel'):
+                    st.session_state.penyakit_excel = _cached_excel_bytes(
+                        (rekap_penyakit, rekap_penyakit.head(10)),
+                        ('Semua Penyakit', 'Top 10'), (True, True),
+                    )
+                    st.session_state.penyakit_excel_hash = st.session_state.df_clean_hash
+                if st.session_state.get('penyakit_excel_hash') == st.session_state.df_clean_hash:
+                    st.download_button(
+                        'Download Rekap Penyakit (Excel)',
+                        data=st.session_state.penyakit_excel,
+                        file_name='Rekap_Penyakit_Terbanyak.xlsx',
+                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        key='dl_penyakit'
+                    )
             else:
                 st.warning('Kolom diagnosa tidak ditemukan.')
         with st.expander(" Rekap Pasien per DPJP (Dokter)", expanded=False):
@@ -779,17 +818,18 @@ with tab4:
 
                 st.dataframe(rekap_dpjp, use_container_width=True, hide_index=True)
 
-                # Tombol Download
-                buf_dpjp = io.BytesIO()
-                with pd.ExcelWriter(buf_dpjp, engine='openpyxl') as writer:
-                    rekap_dpjp.to_excel(writer, index=False)
-
-                st.download_button(
-                    label="⬇️ Download Rekap DPJP (Excel)",
-                    data=buf_dpjp.getvalue(),
-                    file_name="Rekap_Pasien_DPJP.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="dl_dpjp"
-                )
+                if st.button("Siapkan Excel Rekap DPJP", key="prepare_dpjp_excel"):
+                    st.session_state.dpjp_excel = _cached_excel_bytes(
+                        (rekap_dpjp,), ('Rekap DPJP',), (False,)
+                    )
+                    st.session_state.dpjp_excel_hash = st.session_state.df_clean_hash
+                if st.session_state.get('dpjp_excel_hash') == st.session_state.df_clean_hash:
+                    st.download_button(
+                        label="⬇️ Download Rekap DPJP (Excel)",
+                        data=st.session_state.dpjp_excel,
+                        file_name="Rekap_Pasien_DPJP.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key="dl_dpjp"
+                    )
             else:
                 st.warning("Kolom dokter tidak ditemukan. Pastikan sudah di-map di Tab Upload.")
