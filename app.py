@@ -459,8 +459,16 @@ with tab1:
                         map_kelas = st.selectbox("Kolom Kelas Jaminan", kolom_options, index=kolom_options.index('kelas_jaminan') if 'kelas_jaminan' in kolom_options else 0)
                         default_diag = next((c for c in df.columns if 'diag' in str(c).lower() or 'penyakit' in str(c).lower()), kolom_options[0])
                         map_diag = st.selectbox("Kolom Diagnosa (Penyakit)", kolom_options, index=kolom_options.index(default_diag) if default_diag in kolom_options else 0)
-                        # Deteksi otomatis kolom dokter
-                        default_dokter = next((c for c in df.columns if 'dokter' in str(c).lower() or 'dpjp' in str(c).lower()), kolom_options[0])
+                        # Deteksi otomatis kolom dokter — nama kanonis dulu, lalu alias lama.
+                        default_dokter = next(
+                            (c for c in df.columns if str(c).strip().casefold() == "dokter"),
+                            None,
+                        )
+                        if default_dokter is None:
+                            default_dokter = next(
+                                (c for c in df.columns if "dokter" in str(c).lower() or "dpjp" in str(c).lower()),
+                                kolom_options[0],
+                            )
                         map_dokter = st.selectbox("Kolom Dokter (DPJP)", kolom_options, index=kolom_options.index(default_dokter) if default_dokter in kolom_options else 0)
                     
                     if st.button(" Proses Data Pasien"):

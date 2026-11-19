@@ -31,6 +31,8 @@ def guess_column_types(df):
         "tgl_keluar": None,
         "penjamin": None,
         "kelas_jaminan": None,
+        "diagnosa": None,
+        "dokter": None,
     }
     if df is None or df.empty:
         return guesses
@@ -145,6 +147,18 @@ def guess_column_types(df):
         (column for column, _ in sorted_dates if column != guesses["tgl_masuk"]),
         None,
     )
+    diagnosa_named = [
+        column for column in candidate_columns
+        if any(word in str(column).casefold() for word in ("diagnosa", "diagnosis", "diag", "penyakit"))
+    ]
+    if diagnosa_named:
+        guesses["diagnosa"] = diagnosa_named[0]
+    dokter_named = [
+        column for column in candidate_columns
+        if any(word in str(column).casefold() for word in ("dokter", "dpjp"))
+    ]
+    if dokter_named:
+        guesses["dokter"] = dokter_named[0]
     return guesses
 
 
@@ -237,7 +251,43 @@ def clean_dataframe_vectorized(df_mentah, mapping_dict, master_kelas,
     empty_selection = "— Pilih kolom —"
 
     def selected_series(key, default=None):
-        column = mapping_dict.get(key, empty_selection)
+        if key == "map_dokter":
+            doctor_keys = (
+                "map_dokter", "dokter", "dpjp", "dokter_dpjp", "dpjp_dokter", "map_dpjp"
+            )
+            requested_column = next((mapping_dict.get(alias) for alias in doctor_keys
+                                     if mapping_dict.get(alias) not in (None, empty_selection)),
+                                    empty_selection)
+            if requested_column in df_mentah.columns:
+                column = requested_column
+            elif str(requested_column).strip().casefold() in {
+                "dpjp", "dokter", "dokter (dpjp)", "dpjp (dokter)", "nama dokter",
+                "dokter penanggung jawab", "dpjp/dokter", "dokter_dpjp", "dpjp_dokter",
+            }:
+                column = next((candidate for candidate in df_mentah.columns
+                               if str(candidate).strip().casefold() == "dokter"), None)
+                if column is None:
+                    column = next((candidate for candidate in df_mentah.columns
+                                   if str(candidate).strip().casefold() in {"dpjp", "dokter (dpjp)",
+                                       "dpjp (dokter)", "nama dokter", "dokter penanggung jawab",
+                                       "dpjp/dokter", "dokter_dpjp", "dpjp_dokter"}), empty_selection)
+            else:
+                column = empty_selection
+        elif key == "map_diag":
+            diagnosis_keys = ("map_diag", "diag", "diagnosa", "diagnosis", "penyakit")
+            requested_column = next((mapping_dict.get(alias) for alias in diagnosis_keys
+                                     if mapping_dict.get(alias) not in (None, empty_selection)),
+                                    empty_selection)
+            if requested_column in df_mentah.columns:
+                column = requested_column
+            elif str(requested_column).strip().casefold() in diagnosis_keys[1:]:
+                column = next((candidate for candidate in df_mentah.columns
+                               if str(candidate).strip().casefold() in diagnosis_keys[1:]),
+                              empty_selection)
+            else:
+                column = empty_selection
+        else:
+            column = mapping_dict.get(key, empty_selection)
         if column != empty_selection and column in df_mentah.columns:
             return df_mentah[column]
         return pd.Series(default, index=df_mentah.index)
