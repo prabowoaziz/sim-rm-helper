@@ -156,6 +156,7 @@ footer {
 """, unsafe_allow_html=True)
 
 # Inisialisasi Supabase (Pastikan di Streamlit Secrets sudah ada url & key)
+supabase = None
 try:
     supabase: Client = create_client(st.secrets["supabase"]["url"], st.secrets["supabase"]["key"])
 except Exception as e:
@@ -293,8 +294,11 @@ with tab_master:
                     }
                     for r, tt in st.session_state.master_tt.items()
                 ]
-                supabase.table('master_tt').upsert(data_tt, on_conflict='ruangan').execute()
-                st.success('Master TT tersimpan di database!')
+                try:
+                    supabase.table('master_tt').upsert(data_tt, on_conflict='ruangan').execute()
+                    st.success('Master TT tersimpan di database!')
+                except Exception as e:
+                    st.warning(f'Gagal menyimpan Master TT ke Supabase: {e}')
     with st.expander("️ Master Kelas Kamar", expanded=False):
         opsi_kelas = ['VIP', '1', '2', '3', 'HCU', 'ICU', 'NICU', 'PICU', 'Perina', 'Isolasi Normal', 'Isolasi-ICU', 'Transit IGD']
         for nama_ruangan in st.session_state.master_tt:
@@ -513,6 +517,7 @@ with tab1:
                                 st.success(f"✅ Berhasil memproses {len(df_clean)} baris data dan menyimpannya ke database!")
                             except Exception as e:
                                 st.warning(f"Data diproses, tapi gagal simpan ke database: {e}")
+                        st.rerun()
 
     if st.session_state.df_clean is not None:
         with st.container(border=True):
@@ -779,7 +784,7 @@ with tab4:
                 c2.metric('Total Pasien', total_pasien)
                 c3.metric('Diagnosa Terbanyak', rekap_penyakit.iloc[0]['diagnosa'] if len(rekap_penyakit) > 0 else '-')
 
-                top_n = st.slider('Tampilkan Top N', min_value=min(5, len(rekap_penyakit)), max_value=min(100, len(rekap_penyakit)), value=min(20, len(rekap_penyakit)), key='slider_penyakit')
+                top_n = st.slider('Tampilkan Top N', min_value=1, max_value=min(100, len(rekap_penyakit)), value=min(20, len(rekap_penyakit)), key='slider_penyakit')
                 st.dataframe(rekap_penyakit.head(top_n), use_container_width=True)
 
                 st.markdown('**10 Penyakit Terbanyak**')
