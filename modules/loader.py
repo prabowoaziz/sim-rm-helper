@@ -143,6 +143,7 @@ def load_sheet_by_name(file_bytes, file_name, sheet_name):
     try:
         source = io.BytesIO(file_bytes)
         is_csv = str(file_name).casefold().endswith('.csv')
+        header_preserved = False
         if is_csv:
             df = pd.read_csv(source)
             mapping = None
@@ -155,10 +156,28 @@ def load_sheet_by_name(file_bytes, file_name, sheet_name):
                 mapping = MAPPING_14COL
             else:
                 mapping = None
+                df_header = pd.read_excel(
+                    io.BytesIO(file_bytes), sheet_name=sheet_name, header=0
+                )
+                normalized_headers = [
+                    str(column).strip().casefold().replace(" ", "_").replace(".", "").replace("-", "_")
+                    for column in df_header.columns
+                ]
+                has_recognized_header = any(
+                    any(marker in column for marker in ("dokter", "dpjp", "diagnosa", "diagnosis", "nama", "no_rm"))
+                    for column in normalized_headers
+                )
+                if has_recognized_header:
+                    df = df_header
+                    header_preserved = True
+                elif len(df.columns) == 15:
+                    mapping = MAPPING_15COL
+                elif len(df.columns) == 14:
+                    mapping = MAPPING_14COL
 
         if mapping is not None:
             df = df.rename(columns=mapping)
-        elif not is_csv:
+        elif not is_csv and not header_preserved:
             df.columns = _default_excel_column_names(len(df.columns))
 
         df = _normalize_doctor_aliases(df)

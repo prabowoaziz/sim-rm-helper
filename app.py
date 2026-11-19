@@ -525,6 +525,20 @@ with tab1:
                         )
                         st.session_state.df_clean = df_clean
                         st.session_state.df_clean_hash = _dataframe_hash(df_clean)
+                        dokter_series = (
+                            df_clean["dokter"]
+                            if "dokter" in df_clean.columns
+                            else pd.Series(index=df_clean.index, dtype="object")
+                        )
+                        st.session_state.doctor_mapping_debug = {
+                            "selection": map_dokter,
+                            "input_columns": list(df.columns),
+                            "input_has_selection": map_dokter in df.columns,
+                            "has_doctor_column": "dokter" in df_clean.columns,
+                            "filled": int(dokter_series.notna().sum()),
+                            "rows": len(df_clean),
+                            "examples": list(dokter_series.dropna().astype(str).unique()[:3]),
+                        }
                         
                         # Otomatis simpan ke Supabase (riwayat_upload)
                         with st.spinner("Menyimpan riwayat upload..."):
@@ -539,6 +553,16 @@ with tab1:
     if st.session_state.df_clean is not None:
         with st.container(border=True):
             st.subheader("✅ Preview Data Bersih")
+            doctor_debug = st.session_state.get("doctor_mapping_debug")
+            if doctor_debug:
+                st.caption(
+                    f"Mapping Dokter: pilihan lu = '{doctor_debug['selection']}' | "
+                    f"kolom di df mentah = '{doctor_debug['selection']}' "
+                    f"(ada? {doctor_debug['input_has_selection']}) | "
+                    f"kolom dokter di df_clean ada? {doctor_debug['has_doctor_column']} | "
+                    f"dokter terisi: {doctor_debug['filled']} dari {doctor_debug['rows']} baris | "
+                    f"contoh dokter: {doctor_debug['examples']}"
+                )
             st.dataframe(st.session_state.df_clean, use_container_width=True)
             if st.button("Siapkan Excel Data Bersih", key="prepare_clean_excel"):
                 st.session_state.clean_excel_bytes = _cached_excel_bytes(
@@ -827,7 +851,46 @@ with tab4:
         with st.expander(" Rekap Pasien per DPJP (Dokter)", expanded=False):
             st.write("Rekapitulasi jumlah pasien yang ditangani oleh masing-masing dokter.")
 
-            rekap_dpjp = hitung_rekap_dpjp(df_long)
+            df_clean_rekap = st.session_state.df_clean
+            doctor_debug = st.session_state.get("doctor_mapping_debug", {})
+            mapping_selection = doctor_debug.get("selection", "— Pilih kolom —")
+            input_columns = doctor_debug.get("input_columns", list(df_clean_rekap.columns))
+            rekap_dpjp = pd.DataFrame(columns=["Nama Dokter (DPJP)", "Jumlah Pasien Unik"])
+            if "dokter" not in df_clean_rekap.columns:
+                st.warning(
+                    f"Kolom dokter tidak ditemukan di df_clean. Mapping yang dipilih di Upload: "
+                    f"'{mapping_selection}'. Kolom di df mentah: {input_columns}. "
+                    "Coba pilih ulang kolom Dokter di Tab Upload."
+                )
+            elif int(df_clean_rekap["dokter"].notna().sum()) == 0:
+                st.warning(
+                    f"Kolom dokter ada tapi isinya kosong semua (0 dari {len(df_clean_rekap)} baris). "
+                    f"Mapping yang dipilih: '{mapping_selection}'. Kolom di df mentah: {input_columns}."
+                )
+            else:
+                doctor_labels = df_clean_rekap["dokter"].astype("string").str.strip()
+                valid_doctor = (
+                    doctor_labels.notna()
+                    & doctor_labels.ne("")
+                    & doctor_labels.str.lower().ne("nan")
+                )
+                doctor_rows = df_clean_rekap.loc[valid_doctor].copy()
+                if doctor_rows.empty:
+                    st.warning(
+                        f"Kolom dokter ada tapi tidak berisi nama dokter yang bisa direkap. "
+                        f"Mapping yang dipilih: '{mapping_selection}'. Kolom di df mentah: {input_columns}."
+                    )
+                elif "no_rm" in doctor_rows.columns:
+                    rekap_dpjp = doctor_rows.groupby("dokter")["no_rm"].nunique().reset_index()
+                    rekap_dpjp.columns = ["Nama Dokter (DPJP)", "Jumlah Pasien Unik"]
+                else:
+                    rekap_dpjp = doctor_rows.groupby("dokter").size().reset_index(name="Jumlah Pasien Unik")
+                    rekap_dpjp.columns = ["Nama Dokter (DPJP)", "Jumlah Pasien Unik"]
+                if not rekap_dpjp.empty:
+                    rekap_dpjp = rekap_dpjp.sort_values(
+                        "Jumlah Pasien Unik", ascending=False
+                    ).reset_index(drop=True)
+
             if not rekap_dpjp.empty:
                 st.dataframe(rekap_dpjp, use_container_width=True, hide_index=True)
 
@@ -844,5 +907,3 @@ with tab4:
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         key="dl_dpjp"
                     )
-            else:
-                st.warning("Kolom dokter tidak ditemukan atau belum ada dokter untuk direkap. Pastikan sudah di-map di Tab Upload.")
