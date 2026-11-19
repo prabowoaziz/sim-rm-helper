@@ -3,7 +3,13 @@ import pandas as pd
 import io
 import json
 import hashlib
-from supabase import create_client, Client
+try:
+    from supabase import create_client, Client
+    SUPABASE_AVAILABLE = True
+except ImportError:
+    create_client = None
+    Client = None
+    SUPABASE_AVAILABLE = False
 
 from modules.loader import get_sheet_names, load_sheet_by_name
 from modules.cleaner import clean_dataframe_vectorized
@@ -157,10 +163,13 @@ footer {
 
 # Inisialisasi Supabase (Pastikan di Streamlit Secrets sudah ada url & key)
 supabase = None
-try:
-    supabase: Client = create_client(st.secrets["supabase"]["url"], st.secrets["supabase"]["key"])
-except Exception as e:
-    st.error(f"Gagal koneksi ke Supabase: {e}")
+if SUPABASE_AVAILABLE and create_client is not None:
+    try:
+        supabase: Client = create_client(st.secrets["supabase"]["url"], st.secrets["supabase"]["key"])
+    except Exception as e:
+        st.warning(f"Supabase tidak tersedia; app berjalan dalam mode lokal (data tidak tersimpan ke cloud). Detail: {e}")
+else:
+    st.warning("Library Supabase tidak tersedia; app berjalan dalam mode lokal (data tidak tersimpan ke cloud).")
 
 st.title(" SIM-RM Helper")
 st.caption("Asisten Laporan Rekam Medis — Upload, Olah, Laporkan")
