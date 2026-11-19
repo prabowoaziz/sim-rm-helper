@@ -110,6 +110,24 @@ st.title(" SIM-RM Helper")
 st.caption("Asisten Laporan Rekam Medis — Upload, Olah, Laporkan")
 st.markdown("---")
 
+# Periode laporan — WAJIB dari user, jangan ditebak dari data
+if "periode_awal" not in st.session_state:
+    st.session_state.periode_awal = None
+if "periode_akhir" not in st.session_state:
+    st.session_state.periode_akhir = None
+with st.container(border=True):
+    st.write("**Periode Laporan (Wajib)**")
+    _c1, _c2 = st.columns(2)
+    _p_awal = _c1.date_input("Tanggal awal", value=st.session_state.periode_awal)
+    _p_akhir = _c2.date_input("Tanggal akhir", value=st.session_state.periode_akhir)
+    if _p_awal and _p_akhir:
+        st.session_state.periode_awal = _p_awal
+        st.session_state.periode_akhir = _p_akhir
+    if not _p_awal or not _p_akhir:
+        st.warning("Isi dulu Periode Laporan di atas, BOR / Laporan tidak akan dihitung sebelum periode diisi.")
+    elif _p_akhir < _p_awal:
+        st.error("Tanggal akhir harus >= tanggal awal.")
+
 # ==========================================
 # 2. INITIALIZE SESSION STATE
 # ==========================================
@@ -580,10 +598,18 @@ with tab3:
     st.subheader(" BOR & Indikator")
     if st.session_state.df_clean is None:
         st.info("Silakan upload dan proses data terlebih dahulu.")
+    elif st.session_state.periode_awal is None or st.session_state.periode_akhir is None:
+        st.warning("Isi dulu Periode Laporan di atas sebelum menghitung BOR.")
+    elif st.session_state.periode_akhir < st.session_state.periode_awal:
+        st.error("Tanggal akhir harus >= tanggal awal.")
     else:
         with st.container(border=True):
             df_long = track_perpindahan(st.session_state.df_clean)
-            df_bor = hitung_bor(df_long, st.session_state.master_tt, st.session_state.master_dihitung_bor, None)
+            df_bor = hitung_bor(
+                df_long, st.session_state.master_tt, st.session_state.master_dihitung_bor,
+                periode_awal=st.session_state.periode_awal,
+                periode_akhir=st.session_state.periode_akhir,
+            )
             
             if not df_bor.empty:
                 total = df_bor.iloc[-1]
@@ -596,8 +622,16 @@ with tab3:
                 st.dataframe(df_bor, use_container_width=True, hide_index=True)
 
             st.subheader(" BOR Harian RS")
-            total_tt_aktif = sum(st.session_state.master_tt.values())
-            df_harian = hitung_bor_harian(df_long, total_tt_aktif)
+            total_tt_aktif = sum(
+                int(tt) for ruang, tt in st.session_state.master_tt.items()
+                if st.session_state.master_dihitung_bor.get(ruang, True)
+            )
+            df_harian = hitung_bor_harian(
+                df_long, total_tt_aktif,
+                periode_awal=st.session_state.periode_awal,
+                periode_akhir=st.session_state.periode_akhir,
+                master_dihitung_bor=st.session_state.master_dihitung_bor,
+            )
             rata_rata = hitung_rata_rata_bor(df_harian)
             st.metric("Rata-rata BOR Harian", f"{rata_rata}%")
             st.dataframe(df_harian, use_container_width=True)
@@ -609,6 +643,10 @@ with tab4:
     st.subheader(" Laporan RL & Akreditasi")
     if st.session_state.df_clean is None:
         st.info("Silakan upload dan proses data terlebih dahulu.")
+    elif st.session_state.periode_awal is None or st.session_state.periode_akhir is None:
+        st.warning("Isi dulu Periode Laporan di atas sebelum menghitung laporan.")
+    elif st.session_state.periode_akhir < st.session_state.periode_awal:
+        st.error("Tanggal akhir harus >= tanggal awal.")
     else:
         df_long = track_perpindahan(st.session_state.df_clean)
         
