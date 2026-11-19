@@ -13,7 +13,7 @@ MAPPING_15COL = {
     3: "no_rm",
     4: "_drop_2",
     5: "diagnosa",
-    6: "dpjp",
+    6: "dokter",
     7: "jaminan",
     8: "kelas_jaminan",
     9: "kamar",
@@ -31,7 +31,7 @@ MAPPING_14COL = {
     2: "_drop_1",
     3: "no_rm",
     4: "diagnosa",
-    5: "dpjp",
+    5: "dokter",
     6: "jaminan",
     7: "kamar",
     8: "tgl_masuk",
@@ -54,6 +54,36 @@ def _default_excel_column_names(column_count):
             label = chr(65 + remainder) + label
         names.append(f"Kolom {label}")
     return names
+
+
+def _normalize_doctor_aliases(df):
+    """Normalize doctor and diagnosis header aliases without duplicate doctor columns."""
+    doctor_aliases = {
+        "dpjp", "dokter", "dokter (dpjp)", "dpjp (dokter)", "nama dokter",
+        "dokter penanggung jawab", "dpjp/dokter",
+    }
+    diagnosis_aliases = {"diagnosa", "diagnosis", "penyakit", "diag"}
+    columns = []
+    used = set()
+    doctor_count = 0
+    for column in df.columns:
+        label = str(column).strip().casefold()
+        if label in doctor_aliases:
+            doctor_count += 1
+            name = "dokter" if doctor_count == 1 else f"dokter_{doctor_count}"
+            while name in used:
+                doctor_count += 1
+                name = f"dokter_{doctor_count}"
+            used.add(name)
+            columns.append(name)
+        elif label in diagnosis_aliases:
+            columns.append("diagnosa")
+            used.add("diagnosa")
+        else:
+            columns.append(column)
+            used.add(column)
+    df.columns = columns
+    return df
 
 SHEET_GROUP_15COL_NO_HEADER = {
     "px masuk": "15col_no_header",
@@ -130,6 +160,8 @@ def load_sheet_by_name(file_bytes, file_name, sheet_name):
             df = df.rename(columns=mapping)
         elif not is_csv:
             df.columns = _default_excel_column_names(len(df.columns))
+
+        df = _normalize_doctor_aliases(df)
 
         if {"nama_lengkap", "no_rm"}.issubset(df.columns):
             df[["nama_lengkap", "no_rm"]] = df[["nama_lengkap", "no_rm"]].replace(
