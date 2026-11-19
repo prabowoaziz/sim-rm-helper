@@ -10,6 +10,10 @@ from modules.cleaner import clean_nama, split_jk_umur, parse_kamar, clean_kelas
 from modules.tracker import track_perpindahan
 from modules.bor_calculator import hitung_bor, hitung_bor_harian, hitung_rata_rata_bor
 from modules.reporter import hitung_statistik_dan_mortalitas, hitung_rl_31, hitung_rl_4a
+from modules.master_data import (
+    MASTER_TT_DEFAULT, MASTER_KELAS_DEFAULT, MASTER_DIHITUNG_BOR_DEFAULT,
+    normalisasi_ruang, total_tt_dihitung, load_master_from_supabase,
+)
 
 # ==========================================
 # 1. KONFIGURASI HALAMAN
@@ -134,33 +138,18 @@ with st.container(border=True):
 if "df_mentah" not in st.session_state: st.session_state.df_mentah = None
 if "df_clean" not in st.session_state: st.session_state.df_clean = None
 if 'master_tt' not in st.session_state:
-    st.session_state.master_tt = {
-        'HCU': 3, 'ICU': 3, 'NICU': 3, 'PICU': 1, 'Isolasi-ICU': 3,
-        'Perina Level 2': 5, 'Perina Level 1 Room': 0,
-        'Sakinah-1': 2, 'Sakinah-2': 5,
-        'Firdaus-1': 1, 'Firdaus-2': 1,
-        **{f'Ar Rahmah-{i}': 2 for i in range(1, 16)},
-        'Safa-1': 2, 'Safa-2': 2, 'Safa-3': 3,
-        **{f'Marwah-{i}': 4 for i in range(1, 10)},
-        'Transit IGD': 0,
-    }
-if "master_kelas" not in st.session_state: st.session_state.master_kelas = {}
+    st.session_state.master_tt = dict(MASTER_TT_DEFAULT)
+if 'master_kelas' not in st.session_state:
+    st.session_state.master_kelas = dict(MASTER_KELAS_DEFAULT)
 if 'master_dihitung_bor' not in st.session_state:
-    st.session_state.master_dihitung_bor = {
-        'Perina Level 1 Room': False,
-        'Transit IGD': False,
-    }
+    st.session_state.master_dihitung_bor = dict(MASTER_DIHITUNG_BOR_DEFAULT)
 
 if 'master_tt_loaded' not in st.session_state:
     try:
-        res = supabase.table('master_tt').select('*').execute()
-        if res.data:
-            st.session_state.master_tt = {r['ruangan']: r['jumlah_tt'] for r in res.data}
-            st.session_state.master_kelas = {r['ruangan']: r.get('kelas', '') for r in res.data}
-            st.session_state.master_dihitung_bor = {r['ruangan']: r.get('dihitung_bor', True) for r in res.data}
-        st.session_state.master_tt_loaded = True
+        load_master_from_supabase(supabase)
     except Exception:
-        st.session_state.master_tt_loaded = True
+        pass
+    st.session_state.master_tt_loaded = True
 
 # ==========================================
 # 3. TABS
@@ -605,8 +594,14 @@ with tab3:
     else:
         with st.container(border=True):
             df_long = track_perpindahan(st.session_state.df_clean)
+            if 'ruang' in df_long.columns:
+                df_long['ruang'] = df_long['ruang'].map(normalisasi_ruang)
+            master_dihitung_bor_bor = {
+                normalisasi_ruang(ruang): value
+                for ruang, value in st.session_state.master_dihitung_bor.items()
+            }
             df_bor = hitung_bor(
-                df_long, st.session_state.master_tt, st.session_state.master_dihitung_bor,
+                df_long, st.session_state.master_tt, master_dihitung_bor_bor,
                 periode_awal=st.session_state.periode_awal,
                 periode_akhir=st.session_state.periode_akhir,
             )
@@ -622,15 +617,14 @@ with tab3:
                 st.dataframe(df_bor, use_container_width=True, hide_index=True)
 
             st.subheader(" BOR Harian RS")
-            total_tt_aktif = sum(
-                int(tt) for ruang, tt in st.session_state.master_tt.items()
-                if st.session_state.master_dihitung_bor.get(ruang, True)
+            total_tt_aktif = total_tt_dihitung(
+                st.session_state.master_tt, st.session_state.master_dihitung_bor
             )
             df_harian = hitung_bor_harian(
                 df_long, total_tt_aktif,
                 periode_awal=st.session_state.periode_awal,
                 periode_akhir=st.session_state.periode_akhir,
-                master_dihitung_bor=st.session_state.master_dihitung_bor,
+                master_dihitung_bor=master_dihitung_bor_bor,
             )
             rata_rata = hitung_rata_rata_bor(df_harian)
             st.metric("Rata-rata BOR Harian", f"{rata_rata}%")
