@@ -1,90 +1,38 @@
-# 🤖 Perintah untuk Codex — SIM-RM Helper
+Halo Codex. Tolong kerjakan instruksi dari saya di bawah ini persis seperti yang diminta, jangan kurang, jangan lebih.
 
-Halo Codex. Gua mau lu bantu setup proyek **SIM-RM Helper** — web app Streamlit untuk pengolahan data rekam medis rumah sakit.
+=== MULAI INSTRUKSI ===
 
-Ikuti perintah di bawah **satu per satu**, jangan lompat. Setiap selesai satu langkah, kabarin gua.
+Tugas 1: Buat file baru bernama `modules/loader.py`.
+Isi dengan kode ini persis:
 
----
-
-## 📁 Konteks Proyek
-
-- **Lokasi:** `C:\Users\Hype GLK\Documents\Projects\sim-rm-helper`
-- **Stack:** Streamlit + Pandas + OpenPyXL + Supabase
-- **Python:** 3.15.2 (venv sudah aktif)
-- **Repo:** https://github.com/prabowoaziz/sim-rm-helper
-- **Status:** folder & file kosong sudah dibuat, tinggal diisi
-
-Struktur folder saat ini:
-```
-sim-rm-helper/
-├── app.py                 (kosong)
-├── requirements.txt       (kosong)
-├── .gitignore             (kosong)
-├── README.md              (kosong)
-├── .streamlit/
-│   └── config.toml        (kosong)
-└── modules/
-    └── __init__.py        (kosong)
-```
-
----
-
-## ✅ PERINTAH 1 — Isi `requirements.txt`
-
-Tulis file `requirements.txt` dengan isi persis:
-
-```
-streamlit>=1.40.0
-pandas>=2.2.0
-openpyxl>=3.1.0
-supabase>=2.0.0
-```
-
----
-
-## ✅ PERINTAH 2 — Isi `.gitignore`
-
-Tulis file `.gitignore` dengan isi persis:
-
-```
-venv/
-__pycache__/
-*.pyc
-.env
-.streamlit/secrets.toml
-*.xlsx
-*.xls
-*.csv
-data/
-.DS_Store
-```
-
----
-
-## ✅ PERINTAH 3 — Isi `.streamlit/config.toml`
-
-Tulis file `.streamlit/config.toml` dengan isi persis:
-
-```toml
-[theme]
-primaryColor = "#0ea5e9"
-backgroundColor = "#f4f6fa"
-secondaryBackgroundColor = "#ffffff"
-textColor = "#0f172a"
-font = "sans serif"
-
-[server]
-maxUploadSize = 50
-```
-
----
-
-## ✅ PERINTAH 4 — Isi `app.py`
-
-Tulis file `app.py` dengan isi persis:
-
-```python
+import pandas as pd
 import streamlit as st
+
+@st.cache_data(show_spinner=False)
+def get_sheet_names(file_bytes, file_name):
+    if file_name.endswith(('.xlsx', '.xls')):
+        try:
+            xls = pd.ExcelFile(file_bytes)
+            return xls.sheet_names
+        except Exception:
+            return []
+    return ["Sheet1"]
+
+@st.cache_data(show_spinner=False)
+def load_data(file_bytes, file_name, sheet_name=None):
+    try:
+        if file_name.endswith('.csv'):
+            df = pd.read_csv(file_bytes)
+        else:
+            df = pd.read_excel(file_bytes, sheet_name=sheet_name, header=0)
+        return df, None
+    except Exception as e:
+        return None, str(e)
+
+Tugas 2: GANTI SELURUH ISI file `app.py` dengan kode UI di bawah ini persis (jangan ubah desain atau CSS-nya):
+
+import streamlit as st
+from modules.loader import get_sheet_names, load_data
 
 st.set_page_config(
     page_title="SIM-RM Helper",
@@ -93,20 +41,75 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+st.markdown("""
+<style>
+    div[data-testid="stMetric"] {
+        background-color: #ffffff;
+        border: 1px solid #e2e8f0;
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    h1 {
+        color: #0ea5e9;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 st.title("🏥 SIM-RM Helper")
 st.caption("Asisten Laporan Rekam Medis — Upload, Olah, Laporkan")
-
 st.markdown("---")
 
-st.info("🚧 Aplikasi sedang dalam pengembangan. Fitur akan ditambahkan bertahap.")
+if "df_mentah" not in st.session_state:
+    st.session_state.df_mentah = None
 
 tab1, tab2, tab3, tab4 = st.tabs(["📤 Upload", "🔁 Mutasi", "🏥 BOR", "📊 Laporan"])
 
 with tab1:
     st.subheader("📤 Upload Data Mentah")
-    uploaded = st.file_uploader("Pilih file Excel", type=["xlsx", "xls", "csv"])
+    st.info("💡 Silakan upload file Excel/CSV hasil tarikan sistem SIMRS.")
+    
+    uploaded = st.file_uploader("Pilih file", type=["xlsx", "xls", "csv"], label_visibility="collapsed")
+    
     if uploaded:
-        st.success(f"File diterima: {uploaded.name}")
+        file_bytes = uploaded.read()
+        sheet_names = get_sheet_names(file_bytes, uploaded.name)
+        
+        if not sheet_names:
+            st.error("❌ Gagal membaca file. Pastikan format file tidak corrupt.")
+        else:
+            selected_sheet = sheet_names[0]
+            if len(sheet_names) > 1:
+                st.write("---")
+                selected_sheet = st.selectbox("📑 Pilih Sheet yang mau diolah:", sheet_names)
+            
+            with st.spinner("Membaca data..."):
+                df, error = load_data(file_bytes, uploaded.name, selected_sheet)
+            
+            if error:
+                st.error(f"❌ Error saat membaca data: {error}")
+            else:
+                st.session_state.df_mentah = df
+                st.success(f"✅ Berhasil membaca **{uploaded.name}** (Sheet: `{selected_sheet}`)")
+                
+                st.write("")
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Total Baris", f"{df.shape[0]:,}")
+                col2.metric("Total Kolom", df.shape[1])
+                col3.metric("Status", "Siap Diproses")
+                
+                st.write("")
+                pv1, pv2 = st.tabs(["📋 Preview Data (5 Baris)", "🔍 Daftar Kolom"])
+                
+                with pv1:
+                    st.dataframe(df.head(), use_container_width=True)
+                
+                with pv2:
+                    kolom_df = {"No": range(1, len(df.columns)+1), "Nama Kolom": list(df.columns)}
+                    st.dataframe(kolom_df, use_container_width=True, hide_index=True)
+    else:
+        st.write("")
+        st.info("Belum ada file yang di-upload.")
 
 with tab2:
     st.subheader("🔁 Track Perpindahan Kamar")
@@ -119,106 +122,5 @@ with tab3:
 with tab4:
     st.subheader("📊 Laporan RL & Akreditasi")
     st.write("Fitur dalam pengembangan.")
-```
 
----
-
-## ✅ PERINTAH 5 — Isi `README.md`
-
-Tulis file `README.md` dengan isi persis:
-
-```markdown
-# SIM-RM Helper
-
-Web app untuk membantu pengolahan data rekam medis rumah sakit.
-
-## Fitur
-- Upload & cleaning data mentah
-- Track perpindahan kamar pasien
-- Hitung BOR, ALOS, TOI, BTO
-- Laporan RL 1–5 & Akreditasi
-
-## Tech Stack
-- Streamlit (frontend + backend Python)
-- Supabase (database + storage)
-- Pandas (olah data)
-```
-
----
-
-## ✅ PERINTAH 6 — Install Dependensi
-
-Setelah semua file diisi, jalankan di terminal VS Code:
-
-```powershell
-pip install -r requirements.txt
-```
-
-Tunggu sampai selesai. Kalau ada error, laporkan ke gua.
-
----
-
-## ✅ PERINTAH 7 — Test Lokal
-
-Setelah install selesai, jalankan:
-
-```powershell
-streamlit run app.py
-```
-
-Browser harusnya kebuka otomatis di `http://localhost:8501`.
-Pastikan muncul:
-- Judul "🏥 SIM-RM Helper"
-- 4 tab: Upload, Mutasi, BOR, Laporan
-- File uploader di tab Upload
-
-Kalau berhasil, tutup dengan `Ctrl+C`. Laporkan hasilnya ke gua.
-
----
-
-## ✅ PERINTAH 8 — Push ke GitHub
-
-Kalau test lokal berhasil, jalankan berurutan:
-
-```powershell
-git add .
-git commit -m "init: struktur awal SIM-RM Helper"
-git branch -M main
-git remote add origin https://github.com/prabowoaziz/sim-rm-helper.git
-git push -u origin main
-```
-
-Kalau `git remote add` error "already exists", ganti dengan:
-
-```powershell
-git remote set-url origin https://github.com/prabowoaziz/sim-rm-helper.git
-git push -u origin main
-```
-
-Laporkan output-nya ke gua.
-
----
-
-## 🎯 Setelah Semua Selesai
-
-Kabarin gua kalau:
-1. Semua file udah terisi
-2. `pip install` sukses
-3. `streamlit run app.py` jalan
-4. `git push` sukses
-
-Nanti gua lanjut ke **Langkah 9: Deploy Streamlit Cloud** dan **Langkah 10: Setup Supabase**.
-
----
-
-## ⚠️ Aturan Penting
-
-- **Jangan** ubah struktur folder tanpa izin
-- **Jangan** tambah dependensi di luar `requirements.txt` dulu
-- **Jangan** commit file `.xlsx`, `.xls`, `.csv`, atau data pasien
-- Kalau ada error, **screenshot + kirim ke gua**, jangan diakalin sendiri dulu
-- Ikuti urutan **satu per satu**, jangan lompat
-
----
-
-**Gua tunggu laporan lu setelah tiap langkah. 🚀**
+=== SELESAI INSTRUKSI ===
